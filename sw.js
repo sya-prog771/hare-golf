@@ -1,6 +1,6 @@
 // 晴れゴルフ場さがし service worker
 // アプリ本体だけをキャッシュし、天気・ゴルフ場データは毎回ネットから取得する
-const CACHE = "hare-golf-v1";
+const CACHE = "hare-golf-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

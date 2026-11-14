@@ -197,7 +197,10 @@
     let lastErr;
     for(const ep of OVERPASS){
       try{
-        const res = await fetch(ep, {method:"POST", body:"data="+encodeURIComponent(q), headers:{"Content-Type":"application/x-www-form-urlencoded"}});
+        const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),60000);
+        let res;
+        try{ res = await fetch(ep, {method:"POST", body:"data="+encodeURIComponent(q), headers:{"Content-Type":"application/x-www-form-urlencoded"}, signal:ctl.signal}); }
+        finally{ clearTimeout(timer); }
         if(!res.ok) throw new Error("HTTP "+res.status);
         const js = await res.json();
         const list = parseCourses(js.elements||[]);
@@ -223,24 +226,47 @@
   }
 
   // ---- weather from Open-Meteo ----
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  async function getJSON(url, tries){
+    let lastErr;
+    for(let t=0;t<tries;t++){
+      const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),25000);
+      try{
+        const res=await fetch(url,{signal:ctl.signal,cache:"no-store"});
+        if(!res.ok){
+          let reason=""; try{ reason=(await res.json()).reason||""; }catch(e){}
+          lastErr=new Error("HTTP "+res.status+(reason?" "+reason:""));
+          if(res.status>=400 && res.status<500 && res.status!==429) throw lastErr; // 条件の誤りは再試行しない
+        }else{
+          return await res.json();
+        }
+      }catch(e){
+        lastErr = e.name==="AbortError" ? new Error("タイムアウト") : e;
+        if(/^HTTP 4(?!29)/.test(lastErr.message)) throw lastErr;
+      }finally{ clearTimeout(timer); }
+      await sleep(1500*(t+1));
+    }
+    throw lastErr;
+  }
   async function fetchWeather(courses, date){
-    const out=[]; const CH=50;
+    const out=new Array(courses.length).fill(null); const CH=20; let failed=0, lastErr=null;
     for(let i=0;i<courses.length;i+=CH){
       const part=courses.slice(i,i+CH);
       const url="https://api.open-meteo.com/v1/forecast?latitude="+part.map(c=>c.lat).join(",")+
         "&longitude="+part.map(c=>c.lon).join(",")+
         "&hourly=precipitation,precipitation_probability,weather_code,temperature_2m,wind_speed_10m"+
         "&timezone=Asia%2FTokyo&wind_speed_unit=ms&start_date="+date+"&end_date="+date;
-      const res=await fetch(url);
-      if(!res.ok){
-        let reason=""; try{ reason=(await res.json()).reason||""; }catch(e){}
-        throw new Error("天気予報を取得できませんでした"+(reason?"（"+reason+"）":""));
-      }
-      const js=await res.json();
-      const arr=Array.isArray(js)?js:[js];
-      arr.forEach((w,k)=>out.push(w));
+      try{
+        const js=await getJSON(url,3);
+        const arr=Array.isArray(js)?js:[js];
+        arr.forEach((w,k)=>{ out[i+k]=w; });
+      }catch(e){ failed+=part.length; lastErr=e; }
       setStatus(`<span class="spinner"></span>天気を確認中… ${Math.min(i+CH,courses.length)} / ${courses.length}`);
     }
+    if(failed===courses.length){
+      throw new Error("天気予報サーバー（Open-Meteo）に接続できませんでした（"+(lastErr&&lastErr.message||"通信エラー")+"）");
+    }
+    out.failed=failed;
     return out;
   }
 
@@ -346,6 +372,7 @@
       sortRows(rows);
       last={rows,prefCode,prefName,date,startMin,endMin}; tab=0;
       render();
+      if(ws.failed) $("status").innerHTML+=`<br><span class="err">※ ${ws.failed}か所は天気を取得できず、一覧から外しています。</span>`;
     }catch(e){
       setStatus(esc(e.message||"エラーが発生しました")+"。電波の良い場所で、少し時間をおいて試してください。",true);
     }finally{
