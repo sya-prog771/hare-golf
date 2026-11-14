@@ -193,6 +193,15 @@
     const key="gw-courses-"+prefCode;
     const c=store.get(key);
     if(c && Date.now()-c.t < 30*24*3600*1000 && c.list && c.list.length) return c.list;
+    // 1) アプリに同梱した一覧（毎月自動更新）を読む。速い。
+    try{
+      const res=await fetch("courses/"+prefCode+".json",{cache:"no-cache"});
+      if(res.ok){
+        const list=await res.json();
+        if(Array.isArray(list) && list.length){ store.set(key,{t:Date.now(),list}); return list; }
+      }
+    }catch(e){}
+    // 2) 同梱データがなければ OpenStreetMap に直接問い合わせる（遅い）
     const q = `[out:json][timeout:90];area["ISO3166-2"="JP-${prefCode}"]["admin_level"="4"]->.a;(way["leisure"="golf_course"](area.a);relation["leisure"="golf_course"](area.a);node["leisure"="golf_course"](area.a););out center tags;`;
     let lastErr;
     for(const ep of OVERPASS){
