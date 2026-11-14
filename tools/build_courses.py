@@ -1,6 +1,8 @@
 """OpenStreetMap から都道府県別のゴルフ場一覧を取得し courses/XX.json に保存する。
 GitHub Actions から実行する（.github/workflows/update-courses.yml）。"""
-import json, os, re, sys, time, urllib.parse, urllib.request
+import functools, json, os, re, sys, time, urllib.parse, urllib.request
+
+print = functools.partial(print, flush=True)  # noqa: A001  ログをすぐ出す
 
 ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
@@ -16,17 +18,17 @@ def query(pref):
          'node["leisure"="golf_course"](area.a););out center tags;')
     data = urllib.parse.urlencode({"data": q}).encode()
     last = None
-    for attempt in range(4):
+    for attempt in range(3):
         for ep in ENDPOINTS:
             try:
                 req = urllib.request.Request(ep, data=data, headers={"User-Agent": "hare-golf-course-builder"})
-                with urllib.request.urlopen(req, timeout=240) as r:
+                with urllib.request.urlopen(req, timeout=150) as r:
                     return json.load(r)["elements"]
             except Exception as e:  # noqa: BLE001
                 last = e
                 print(f"  {pref} {ep}: {e}", file=sys.stderr)
                 time.sleep(10)
-        time.sleep(30 * (attempt + 1))
+        time.sleep(20 * (attempt + 1))
     raise RuntimeError(f"{pref}: {last}")
 
 
