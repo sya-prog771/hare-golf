@@ -244,7 +244,7 @@
   async function getJSON(url, tries){
     let lastErr;
     for(let t=0;t<tries;t++){
-      const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),25000);
+      const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),12000);
       try{
         const res=await fetch(url,{signal:ctl.signal,cache:"no-store"});
         if(!res.ok){
@@ -258,13 +258,19 @@
         lastErr = e.name==="AbortError" ? new Error("タイムアウト") : e;
         if(/^HTTP 4(?!29)/.test(lastErr.message)) throw lastErr;
       }finally{ clearTimeout(timer); }
-      await sleep(1500*(t+1));
+      if(t<tries-1) await sleep(800*(t+1));
     }
     throw lastErr;
   }
   async function fetchWeather(courses, date){
-    const out=new Array(courses.length).fill(null); const CH=20; let failed=0, lastErr=null;
-    for(let i=0;i<courses.length;i+=CH){
+    // 30分以内に同じ県・日付で取った天気は使い回す
+    const wkey="gw-weather-"+date+"-"+courses.length+"-"+courses[0].lat;
+    const cached=store.get(wkey);
+    if(cached && Date.now()-cached.t < 30*60*1000 && cached.list.length===courses.length) return cached.list;
+    const out=new Array(courses.length).fill(null); const CH=20; let failed=0, lastErr=null, done=0;
+    const jobs=[];
+    for(let i=0;i<courses.length;i+=CH) jobs.push(i);
+    async function run(i){
       const part=courses.slice(i,i+CH);
       const url="https://api.open-meteo.com/v1/forecast?latitude="+part.map(c=>c.lat).join(",")+
         "&longitude="+part.map(c=>c.lon).join(",")+
@@ -275,11 +281,16 @@
         const arr=Array.isArray(js)?js:[js];
         arr.forEach((w,k)=>{ out[i+k]=w; });
       }catch(e){ failed+=part.length; lastErr=e; }
-      setStatus(`<span class="spinner"></span>天気を確認中… ${Math.min(i+CH,courses.length)} / ${courses.length}`);
+      done+=part.length;
+      setStatus(`<span class="spinner"></span>天気を確認中… ${done} / ${courses.length}`);
     }
+    // 3本ずつ同時に問い合わせる
+    const workers=[0,1,2].map(async()=>{ while(jobs.length){ await run(jobs.shift()); } });
+    await Promise.all(workers);
     if(failed===courses.length){
       throw new Error("天気予報サーバー（Open-Meteo）に接続できませんでした（"+(lastErr&&lastErr.message||"通信エラー")+"）");
     }
+    if(!failed) store.set(wkey,{t:Date.now(),list:out});
     out.failed=failed;
     return out;
   }
@@ -377,15 +388,19 @@
     $("go").disabled=true;
     try{
       setStatus(`<span class="spinner"></span>${prefName}のゴルフ場を探しています…（初回は数十秒かかることがあります）`);
+      const t0=performance.now();
       const courses=await fetchCourses(prefCode);
+      const t1=performance.now();
       if(!courses.length){ setStatus(prefName+"のゴルフ場データが見つかりませんでした。",true); return; }
       setStatus(`<span class="spinner"></span>天気を確認中… 0 / ${courses.length}`);
       const ws=await fetchWeather(courses,date);
+      const t2=performance.now();
       const rows=[];
       courses.forEach((c,i)=>{ const w=ws[i]; if(!w||!w.hourly) return; const e=evaluate(w,startMin,endMin,thr); if(e) rows.push({c,w,ev:e}); });
       sortRows(rows);
       last={rows,prefCode,prefName,date,startMin,endMin}; tab=0;
       render();
+      $("status").innerHTML+=`<br><small>（ゴルフ場 ${((t1-t0)/1000).toFixed(1)}秒・天気 ${((t2-t1)/1000).toFixed(1)}秒）</small>`;
       if(ws.failed) $("status").innerHTML+=`<br><span class="err">※ ${ws.failed}か所は天気を取得できず、一覧から外しています。</span>`;
     }catch(e){
       setStatus(esc(e.message||"エラーが発生しました")+"。電波の良い場所で、少し時間をおいて試してください。",true);
