@@ -2,11 +2,11 @@ name: ゴルフ場データ更新
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - tools/build_courses.py
-      - .github/workflows/update-courses.yml
+    inputs:
+      prefs:
+        description: "対象の県コード（空欄=全県、例: 03 22）"
+        required: false
+        default: ""
   schedule:
     - cron: "17 18 1 * *" # 毎月2日 03:17（日本時間）
 
@@ -27,6 +27,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: OpenStreetMapからゴルフ場を取得
+        env:
+          PREFS: ${{ github.event.inputs.prefs }}
         run: python -u tools/build_courses.py
       - name: 変更があれば保存（main と gh-pages）
         if: always()

@@ -212,7 +212,12 @@
         finally{ clearTimeout(timer); }
         if(!res.ok) throw new Error("HTTP "+res.status);
         const js = await res.json();
-        const list = parseCourses(js.elements||[]);
+        let list = parseCourses(js.elements||[]);
+        if(!list.length && !q.includes('"name"=')){ // ISOコードのない県は名前で再検索
+          const q2=q.replace(`area["ISO3166-2"="JP-${prefCode}"]`,`area["name"="${PREFS[+prefCode-1]}"]`);
+          const r2=await fetch(ep,{method:"POST",body:"data="+encodeURIComponent(q2),headers:{"Content-Type":"application/x-www-form-urlencoded"}});
+          if(r2.ok) list=parseCourses((await r2.json()).elements||[]);
+        }
         store.set(key,{t:Date.now(),list});
         return list;
       }catch(e){ lastErr=e; }
