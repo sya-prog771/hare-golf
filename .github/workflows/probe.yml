@@ -1,0 +1,8 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python tools/probe.py https://www.rosenka.nta.go.jp/ https://www.rosenka.nta.go.jp/main_r07/index.htm https://www.rosenka.nta.go.jp/main_r07/sendai/iwate/index.htm https://www.rosenka.nta.go.jp/main_r07/sendai/iwate/others/index.htm
