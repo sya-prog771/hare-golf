@@ -262,6 +262,32 @@
     }
     throw lastErr;
   }
+  // GitHub上で1日3回まとめて取得した予報（weather/XX.json）を使う。速くて確実。
+  async function fetchPrebuilt(prefCode, courses, date){
+    try{
+      const res=await fetch("weather/"+prefCode+".json",{cache:"no-cache"});
+      if(!res.ok) return null;
+      const js=await res.json();
+      const age=Date.now()-new Date(js.generated).getTime();
+      if(!(age < 14*3600*1000)) return null;                       // 古すぎる
+      const per=js.hTo-js.hFrom+1;
+      const day=Math.round((new Date(date+"T00:00:00+09:00")-new Date(js.start+"T00:00:00+09:00"))/86400000);
+      if(day<0 || (day+1)*per > js.rows[0].p.length) return null;  // 範囲外
+      const idx=new Map(js.names.map((n,i)=>[n,i]));
+      const times=[]; for(let h=js.hFrom;h<=js.hTo;h++) times.push(date+"T"+String(h).padStart(2,"0")+":00");
+      const sl=a=>a.slice(day*per,(day+1)*per);
+      const out=courses.map(c=>{
+        const i=idx.get(c.name); if(i==null) return null;
+        const r=js.rows[i];
+        return {hourly:{time:times, precipitation:sl(r.p).map(v=>v==null?null:v/10), precipitation_probability:sl(r.pp),
+          weather_code:sl(r.c), temperature_2m:sl(r.t), wind_speed_10m:sl(r.w)}};
+      });
+      if(out.some(x=>!x)) return null;
+      out.failed=0; out.generated=js.generated;
+      return out;
+    }catch(e){ return null; }
+  }
+
   async function fetchWeather(courses, date){
     // 30分以内に同じ県・日付で取った天気は使い回す
     const wkey="gw-weather-"+date+"-"+courses.length+"-"+courses[0].lat;
@@ -393,7 +419,7 @@
       const t1=performance.now();
       if(!courses.length){ setStatus(prefName+"のゴルフ場データが見つかりませんでした。",true); return; }
       setStatus(`<span class="spinner"></span>天気を確認中… 0 / ${courses.length}`);
-      const ws=await fetchWeather(courses,date);
+      const ws=(await fetchPrebuilt(prefCode,courses,date)) || (await fetchWeather(courses,date));
       const t2=performance.now();
       const rows=[];
       courses.forEach((c,i)=>{ const w=ws[i]; if(!w||!w.hourly) return; const e=evaluate(w,startMin,endMin,thr); if(e) rows.push({c,w,ev:e}); });
@@ -401,6 +427,7 @@
       last={rows,prefCode,prefName,date,startMin,endMin}; tab=0;
       render();
       $("status").innerHTML+=`<br><small>（ゴルフ場 ${((t1-t0)/1000).toFixed(1)}秒・天気 ${((t2-t1)/1000).toFixed(1)}秒）</small>`;
+      if(ws.generated) $("status").innerHTML+=`<small>　予報の取得：${ws.generated.slice(5,10).replace('-','/')} ${ws.generated.slice(11,16)}</small>`;
       if(ws.failed) $("status").innerHTML+=`<br><span class="err">※ ${ws.failed}か所は天気を取得できず、一覧から外しています。</span>`;
     }catch(e){
       setStatus(esc(e.message||"エラーが発生しました")+"。電波の良い場所で、少し時間をおいて試してください。",true);

@@ -30,7 +30,7 @@ jobs:
         env:
           PREFS: ${{ github.event.inputs.prefs }}
         run: python -u tools/build_courses.py
-      - name: 変更があれば保存（main と gh-pages）
+      - name: 変更があれば保存
         if: always()
         run: |
           git config user.name "github-actions[bot]"
@@ -41,5 +41,4 @@ jobs:
           else
             git commit -m "ゴルフ場データを更新"
             git push origin HEAD:main
-            git push -f origin HEAD:gh-pages
           fi
