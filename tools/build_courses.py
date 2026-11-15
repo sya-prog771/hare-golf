@@ -40,7 +40,7 @@ def query(pref, by_name=False):
             else f'area["ISO3166-2"="JP-{pref}"]["admin_level"="4"]')
     q = (f'[out:json][timeout:180];{area}->.a;'
          '(way["leisure"="golf_course"](area.a);relation["leisure"="golf_course"](area.a);'
-         'node["leisure"="golf_course"](area.a););out center bb tags;')
+         'node["leisure"="golf_course"](area.a););out bb tags;')
     data = urllib.parse.urlencode({"data": q}).encode()
     last = None
     for attempt in range(3):
@@ -64,11 +64,12 @@ def parse(els):
         name = (t.get("name:ja") or t.get("name") or "").strip()
         if not name or t.get("golf") == "driving_range":
             continue
-        lat = e.get("lat", e.get("center", {}).get("lat"))
-        lon = e.get("lon", e.get("center", {}).get("lon"))
+        bb = e.get("bounds")
+        lat = e.get("lat", (bb["minlat"] + bb["maxlat"]) / 2 if bb else None)
+        lon = e.get("lon", (bb["minlon"] + bb["maxlon"]) / 2 if bb else None)
         if lat is None or lon is None:
             continue
-        area = bbox_km2(e["bounds"]) if "bounds" in e else None
+        area = bbox_km2(bb) if bb else None
         if name in by:
             o = by[name]
             o["lat"] = (o["lat"] * o["n"] + lat) / (o["n"] + 1)
