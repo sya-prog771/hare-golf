@@ -5,4 +5,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python tools/probe.py https://www.rosenka.nta.go.jp/main_r08/sendai/iwate/pref_frm.htm https://www.rosenka.nta.go.jp/main_r08/sendai/iwate/others/index.htm https://www.rosenka.nta.go.jp/main_r08/sendai/iwate/pref_menu.htm https://www.rosenka.nta.go.jp/main_r08/sendai/iwate/others/menu.htm https://www.rosenka.nta.go.jp/main_r08/sapporo/hokkaido/pref_frm.htm
+      - run: pip install -q pdfplumber && python tools/probe.py sendai/iwate tokyo/chiba sapporo/hokkaido tokyo/tokyo
