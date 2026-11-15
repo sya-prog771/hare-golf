@@ -88,6 +88,14 @@ def norm(s):
     return re.sub(r"[\s・･\-‐ー–_/()（）「」『』,.、。&＆]", "", s)
 
 
+def core(s):
+    """名前から「カントリークラブ」などを除いた中心部分"""
+    return re.sub(r"(cc|gc|カントリー|ゴルフ|倶楽部|クラブ|club|コース|course|リゾート|resort|ゴルフ場)", "", norm(s)) or norm(s)
+
+
+JUNK = re.compile(r"(遊園地|上記以外|用地|^.{0,2}$)")
+
+
 def dist_km(a, b):
     dy = (a[0] - b[0]) * 111.0
     dx = (a[1] - b[1]) * 111.0 * math.cos(math.radians(a[0]))
@@ -122,7 +130,7 @@ def build(pref_idx, pref_url):
     osm = json.load(open(os.path.join(HERE, "osm_snapshot", f"{code}.json"), encoding="utf-8"))
     osm_n = [(norm(o["name"]), o) for o in osm]
     rows = golf_rows(pref_url)
-    named = [(m, n) for m, n in rows if n and not HARD.search(n)]
+    named = [(m, n) for m, n in rows if n and not HARD.search(n) and not JUNK.search(n)]
     if len(named) < 3:
         return None, len(rows)
     out, seen = [], set()
@@ -133,7 +141,8 @@ def build(pref_idx, pref_url):
         seen.add(key)
         center = geocode(pref, muni)
         base = norm(re.split(r"\s", name)[0]) if " " in name else key
-        cands = [o for k, o in osm_n if len(k) >= 3 and (k == key or k == base or (len(base) >= 4 and (base in k or k in base)))]
+        cands = [o for k, o in osm_n if len(k) >= 3 and (k == key or k == base or (len(base) >= 4 and (base in k or k in base))
+                                                      or (len(core(name)) >= 2 and core(o["name"]) == core(name)))]
         if center:
             cands = [o for o in cands if dist_km(center, (o["lat"], o["lon"])) < 35]
             cands.sort(key=lambda o: dist_km(center, (o["lat"], o["lon"])))
@@ -145,7 +154,8 @@ def build(pref_idx, pref_url):
     for o in osm:
         if COURSE_WORD.search(o["name"]) and not HARD.search(o["name"]) and \
                 all(dist_km((o["lat"], o["lon"]), (c["lat"], c["lon"])) > 2 for c in out if not c.get("approx")) and \
-                norm(o["name"]) not in seen:
+                norm(o["name"]) not in seen and \
+                all(core(o["name"]) != core(c["name"]) for c in out):
             out.append({"name": o["name"], "lat": o["lat"], "lon": o["lon"]})
             seen.add(norm(o["name"]))
     return sorted(out, key=lambda c: c["name"]), len(rows)
