@@ -92,8 +92,61 @@ def parse(els):
     return sorted(out, key=lambda o: o["name"])
 
 
+WIKIDATA_Q = """
+SELECT ?g ?label ?coord ?iso WHERE {
+  ?g wdt:P31/wdt:P279* wd:Q1048525 ; wdt:P17 wd:Q17 ; wdt:P625 ?coord .
+  OPTIONAL { ?g wdt:P131* ?p . ?p wdt:P31 wd:Q50337 ; wdt:P300 ?iso . }
+  ?g rdfs:label ?label . FILTER(LANG(?label) = "ja")
+}"""
+
+
+def wikidata():
+    """Wikidata の日本のゴルフ場（名前・座標・都道府県）"""
+    url = "https://query.wikidata.org/sparql?format=json&query=" + urllib.parse.quote(WIKIDATA_Q)
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "hare-golf-course-builder (github.com/sya-prog771/hare-golf)",
+                                                       "Accept": "application/sparql-results+json"})
+            with urllib.request.urlopen(req, timeout=180) as r:
+                rows = json.load(r)["results"]["bindings"]
+            break
+        except Exception as e:  # noqa: BLE001
+            print(f"wikidata retry: {e}")
+            time.sleep(30)
+    else:
+        return {}
+    by = {}
+    for b in rows:
+        name = b["label"]["value"].strip()
+        m = re.match(r"Point\(([-0-9.]+) ([-0-9.]+)\)", b["coord"]["value"])
+        iso = b.get("iso", {}).get("value", "")
+        if not m or not iso.startswith("JP-") or HARD.search(name):
+            continue
+        by.setdefault(iso[3:], {})[b["g"]["value"]] = {"name": name, "lat": round(float(m.group(2)), 4), "lon": round(float(m.group(1)), 4)}
+    out = {k: list(v.values()) for k, v in by.items()}
+    print("wikidata:", sum(len(v) for v in out.values()))
+    return out
+
+
+def dist_km(a, b):
+    import math
+    dy = (a["lat"] - b["lat"]) * 111.0
+    dx = (a["lon"] - b["lon"]) * 111.0 * math.cos(math.radians(a["lat"]))
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def merge(primary, extra):
+    """Wikidata を優先し、1km以内に同じゴルフ場がない OSM のものを足す"""
+    out = list(primary)
+    for c in extra:
+        if all(dist_km(c, p) > 1.0 for p in out):
+            out.append(c)
+    return sorted(out, key=lambda o: o["name"])
+
+
 def main():
     os.makedirs("courses", exist_ok=True)
+    wd = wikidata()
     failed = []
     only = os.environ.get("PREFS", "").split()
     for i in range(1, 48):
@@ -101,19 +154,21 @@ def main():
         if only and pref not in only:
             continue
         try:
-            courses = parse(query(pref))
-            if not courses:  # ISO コードが付いていない県は名前で探す
-                courses = parse(query(pref, by_name=True))
+            osm = parse(query(pref))
+            if not osm:  # ISO コードが付いていない県は名前で探す
+                osm = parse(query(pref, by_name=True))
         except Exception as e:  # noqa: BLE001
-            print(f"FAILED {pref}: {e}", file=sys.stderr)
+            print(f"FAILED {pref}: {e}")
             failed.append(pref)
+            osm = None
+        if osm is None and not wd.get(pref):
             continue
-        if not courses:
-            print(f"EMPTY {pref}, keep old file", file=sys.stderr)
-            continue
+        courses = merge(wd.get(pref, []), osm or [])
+        if osm is None and os.path.exists(f"courses/{pref}.json"):  # OSM が取れなければ前回分と合わせる
+            courses = merge(courses, json.load(open(f"courses/{pref}.json", encoding="utf-8")))
         with open(f"courses/{pref}.json", "w", encoding="utf-8") as f:
             json.dump(courses, f, ensure_ascii=False, separators=(",", ":"))
-        print(f"{pref}: {len(courses)}")
+        print(f"{pref}: {len(courses)} (wikidata {len(wd.get(pref, []))}, osm {len(osm) if osm is not None else '-'})")
         time.sleep(5)
     if len(failed) > 10:
         sys.exit(f"too many failures: {failed}")

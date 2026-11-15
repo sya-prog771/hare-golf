@@ -28,14 +28,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: 天気予報を取得（定時・手動実行のとき）
+      - name: 前回の天気予報を取り出す
+        run: |
+          git fetch --depth=1 origin gh-pages && git checkout FETCH_HEAD -- weather || mkdir -p weather
+      - name: 天気予報を取得（定時・手動実行のとき。失敗した県は前回分のまま）
         if: github.event_name != 'push'
         run: python -u tools/build_weather.py
-      - name: 前回の天気予報を使う（アプリ更新のとき）
-        if: github.event_name == 'push'
-        run: |
-          git fetch --depth=1 origin gh-pages
-          git checkout FETCH_HEAD -- weather
       - name: gh-pages に公開
         run: |
           mkdir -p /tmp/site
