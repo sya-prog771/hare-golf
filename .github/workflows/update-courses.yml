@@ -21,16 +21,16 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: OpenStreetMapからゴルフ場を取得
+      - name: 国税庁の一覧からゴルフ場を作成
         env:
           PREFS: ${{ github.event.inputs.prefs }}
-        run: python -u tools/build_courses.py
+        run: pip install -q pdfplumber && python -u tools/build_courses_nta.py
       - name: 変更があれば保存
         if: always()
         env:

@@ -1,8 +1,0 @@
-name: probe
-on: workflow_dispatch
-jobs:
-  p:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install -q pdfplumber && python tools/probe.py sendai/iwate tokyo/chiba sapporo/hokkaido tokyo/tokyo
