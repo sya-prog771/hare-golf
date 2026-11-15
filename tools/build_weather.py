@@ -1,7 +1,7 @@
 """courses/XX.json の全ゴルフ場について Open-Meteo の16日予報を取り、weather/XX.json に保存する。
 GitHub Actions から実行する（.github/workflows/update-weather.yml）。
 保存するのは 6〜20時ラベル（= 5:00〜20:00 の各1時間）だけ。"""
-import datetime as dt, functools, glob, json, os, sys, time, urllib.parse, urllib.request
+import datetime as dt, functools, glob, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 print = functools.partial(print, flush=True)  # noqa: A001
 
@@ -10,7 +10,12 @@ BATCH = 50
 VARS = "precipitation,precipitation_probability,weather_code,temperature_2m,wind_speed_10m"
 
 
+STOP = {"flag": False}  # 1日の上限に達したら以降は取りに行かない
+
+
 def fetch(part):
+    if STOP["flag"]:
+        raise RuntimeError("daily limit reached (skipped)")
     q = {
         "latitude": ",".join(str(c["lat"]) for c in part),
         "longitude": ",".join(str(c["lon"]) for c in part),
@@ -23,6 +28,13 @@ def fetch(part):
             with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "hare-golf"}), timeout=60) as r:
                 js = json.load(r)
                 return js if isinstance(js, list) else [js]
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")
+            last = RuntimeError(f"HTTP {e.code} {body[:200]}")
+            print(f"  retry {attempt + 1}: {last}")
+            if e.code == 429 and ("Daily" in body or "daily" in body):
+                STOP["flag"] = True
+                raise last
         except Exception as e:  # noqa: BLE001
             last = e
             print(f"  retry {attempt + 1}: {e}")
@@ -39,6 +51,24 @@ def pack(w):
 
     return {"p": col("precipitation", 10), "pp": col("precipitation_probability"), "c": col("weather_code"),
             "t": col("temperature_2m"), "w": col("wind_speed_10m")}, h["time"][0][:10]
+
+
+def keep_previous(pref):
+    """取得できなかった県は前回の予報を残す。位置がなければ補って、近くのゴルフ場に流用できるようにする"""
+    path = f"weather/{pref}.json"
+    if not os.path.exists(path):
+        return
+    prev = json.load(open(path, encoding="utf-8"))
+    if "lats" not in prev:
+        pos = {}
+        for src in (f"tools/osm_snapshot/{pref}.json", f"courses/{pref}.json"):
+            if os.path.exists(src):
+                for c in json.load(open(src, encoding="utf-8")):
+                    pos.setdefault(c["name"], (c["lat"], c["lon"]))
+        prev["lats"] = [pos.get(n, (None, None))[0] for n in prev["names"]]
+        prev["lons"] = [pos.get(n, (None, None))[1] for n in prev["names"]]
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(prev, f, ensure_ascii=False, separators=(",", ":"))
 
 
 def main():
@@ -58,9 +88,11 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f"FAILED {pref}: {e}")
             failed.append(pref)
+            keep_previous(pref)
             continue
         out = {"generated": now, "start": start, "hFrom": H_FROM, "hTo": H_TO,
-               "names": [c["name"] for c in courses], "rows": rows}
+               "names": [c["name"] for c in courses], "lats": [c["lat"] for c in courses],
+               "lons": [c["lon"] for c in courses], "rows": rows}
         with open(f"weather/{pref}.json", "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
         print(f"{pref}: {len(rows)}")

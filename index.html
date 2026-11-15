@@ -280,7 +280,13 @@
       const times=[]; for(let h=js.hFrom;h<=js.hTo;h++) times.push(date+"T"+String(h).padStart(2,"0")+":00");
       const sl=a=>a.slice(day*per,(day+1)*per);
       const out=courses.map(c=>{
-        const i=idx.get(c.name); if(i==null) return null;
+        let i=idx.get(c.name);
+        if(i==null && js.lats){ // 名前がなければ15km以内のいちばん近い地点の予報を使う
+          let best=-1, bd=15;
+          js.lats.forEach((la,k)=>{ if(la==null) return; const dy=(la-c.lat)*111, dx=(js.lons[k]-c.lon)*111*Math.cos(c.lat*Math.PI/180); const d=Math.hypot(dx,dy); if(d<bd){bd=d;best=k;} });
+          if(best>=0) i=best;
+        }
+        if(i==null) return null;
         const r=js.rows[i];
         return {hourly:{time:times, precipitation:sl(r.p).map(v=>v==null?null:v/10), precipitation_probability:sl(r.pp),
           weather_code:sl(r.c), temperature_2m:sl(r.t), wind_speed_10m:sl(r.w)}};
