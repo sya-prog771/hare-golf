@@ -54,7 +54,7 @@ def main():
                 for w in fetch(courses[i:i + BATCH]):
                     r, start = pack(w)
                     rows.append(r)
-                time.sleep(1)
+                time.sleep(7)  # 1分あたりの上限（600回）を超えないように
         except Exception as e:  # noqa: BLE001
             print(f"FAILED {pref}: {e}")
             failed.append(pref)

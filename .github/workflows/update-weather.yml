@@ -2,6 +2,7 @@ name: 天気予報の更新と公開
 
 # 天気予報をまとめて取得し、アプリ一式と一緒に gh-pages ブランチへ公開する。
 # gh-pages は毎回1コミットだけに置き換えるので、履歴が増え続けない。
+# main への push（アプリ更新）では天気は取り直さず、前回の予報をそのまま使う（無料枠の節約）。
 on:
   workflow_dispatch:
   push:
@@ -27,8 +28,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: 天気予報を取得
+      - name: 天気予報を取得（定時・手動実行のとき）
+        if: github.event_name != 'push'
         run: python -u tools/build_weather.py
+      - name: 前回の天気予報を使う（アプリ更新のとき）
+        if: github.event_name == 'push'
+        run: |
+          git fetch --depth=1 origin gh-pages
+          git checkout FETCH_HEAD -- weather
       - name: gh-pages に公開
         run: |
           mkdir -p /tmp/site
