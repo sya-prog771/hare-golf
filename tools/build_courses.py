@@ -9,7 +9,27 @@ ENDPOINTS = [
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 ]
-EXCLUDE = re.compile(r"(練習場|打ちっぱなし|打ちっ放し|パークゴルフ|グラウンドゴルフ|グランドゴルフ|ミニゴルフ|パターゴルフ|インドア|シミュレーション|driving range)", re.I)
+# 名前でコースか練習場かを見分ける
+HARD = re.compile(r"(練習|打ちっぱなし|打ちっ放し|ターゲットバード|パークゴルフ|グラウンド・?ゴルフ|グランドゴルフ|グラウンド•ゴルフ|ground golf|マレット|ゲートボール|GOLFERS24|ドライビングレンジ|driving range|打席|ミニゴルフ|パターゴルフ|インドア|シミュレーション|シミュレーター|ゴルフスタジオ|golf studio|ゴルフスペース|ゴルフパートナー|ステップゴルフ|SMART GOLF|Round1|Asobi-bar)", re.I)
+COURSE = re.compile(r"(カントリー|ＣＣ|(?<![A-Z])CC|C\.C|倶楽部|俱楽部|ゴルフコース|Golf Course|Golf Club|リンクス|Links|ＧＣ|(?<![A-Z])GC|G\.C|ゴルフリゾート|ゴルフ[&＆]リゾート|Golf ?[&＆] ?Resort|Course|コース|ゴルフクラブ)", re.I)
+RANGE = re.compile(r"(ゴルフセンター|Gセンター|Golf ?Center|ガーデン|GARDEN|プラザ|PLAZA|レンジ|レインジ|RANGE|ドーム|広場|ゴルフパーク|GOLF PARK|ゴルフランド|ロングゴルフ|ゴルフレーン|LANE|スイング|SWING|24|ゴルフビレッジ|スタジアム|グリーンゴルフ|ゴルフ$|GOLF$|Golf$)", re.I)
+def is_course(name):
+    if HARD.search(name): return False
+    if COURSE.search(name): return True
+    if RANGE.search(name): return False
+    return True
+
+
+def bbox_km2(b):
+    """バウンディングボックスのおおよその面積（km²）"""
+    import math
+    h = (b["maxlat"] - b["minlat"]) * 111.0
+    w = (b["maxlon"] - b["minlon"]) * 111.0 * math.cos(math.radians((b["maxlat"] + b["minlat"]) / 2))
+    return h * w
+
+
+MIN_COURSE_KM2 = 0.1   # これより狭いものは練習場とみなす
+RESCUE_KM2 = 0.4       # 名前が練習場っぽくても、これより広ければコース
 
 
 PREF_NAMES = "北海道 青森県 岩手県 宮城県 秋田県 山形県 福島県 茨城県 栃木県 群馬県 埼玉県 千葉県 東京都 神奈川県 新潟県 富山県 石川県 福井県 山梨県 長野県 岐阜県 静岡県 愛知県 三重県 滋賀県 京都府 大阪府 兵庫県 奈良県 和歌山県 鳥取県 島根県 岡山県 広島県 山口県 徳島県 香川県 愛媛県 高知県 福岡県 佐賀県 長崎県 熊本県 大分県 宮崎県 鹿児島県 沖縄県".split()
@@ -20,7 +40,7 @@ def query(pref, by_name=False):
             else f'area["ISO3166-2"="JP-{pref}"]["admin_level"="4"]')
     q = (f'[out:json][timeout:180];{area}->.a;'
          '(way["leisure"="golf_course"](area.a);relation["leisure"="golf_course"](area.a);'
-         'node["leisure"="golf_course"](area.a););out center tags;')
+         'node["leisure"="golf_course"](area.a););out center bb tags;')
     data = urllib.parse.urlencode({"data": q}).encode()
     last = None
     for attempt in range(3):
@@ -42,20 +62,33 @@ def parse(els):
     for e in els:
         t = e.get("tags", {})
         name = (t.get("name:ja") or t.get("name") or "").strip()
-        if not name or EXCLUDE.search(name):
+        if not name or t.get("golf") == "driving_range":
             continue
         lat = e.get("lat", e.get("center", {}).get("lat"))
         lon = e.get("lon", e.get("center", {}).get("lon"))
         if lat is None or lon is None:
             continue
+        area = bbox_km2(e["bounds"]) if "bounds" in e else None
         if name in by:
             o = by[name]
             o["lat"] = (o["lat"] * o["n"] + lat) / (o["n"] + 1)
             o["lon"] = (o["lon"] * o["n"] + lon) / (o["n"] + 1)
             o["n"] += 1
+            if area is not None:
+                o["area"] = (o["area"] or 0) + area
         else:
-            by[name] = {"name": name, "lat": lat, "lon": lon, "n": 1}
-    out = [{"name": o["name"], "lat": round(o["lat"], 4), "lon": round(o["lon"], 4)} for o in by.values()]
+            by[name] = {"name": name, "lat": lat, "lon": lon, "n": 1, "area": area}
+    out = []
+    for o in by.values():
+        name, area = o["name"], o["area"]
+        if HARD.search(name):
+            continue
+        if is_course(name):
+            if area is not None and area < MIN_COURSE_KM2:
+                continue
+        elif area is None or area < RESCUE_KM2:
+            continue
+        out.append({"name": name, "lat": round(o["lat"], 4), "lon": round(o["lon"], 4)})
     return sorted(out, key=lambda o: o["name"])
 
 

@@ -128,7 +128,10 @@
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter"
   ];
-  const EXCLUDE = /(練習場|打ちっぱなし|打ちっ放し|パークゴルフ|グラウンドゴルフ|グランドゴルフ|ミニゴルフ|パターゴルフ|インドア|シミュレーション|driving range)/i;
+  const HARD = /(練習|打ちっぱなし|打ちっ放し|ターゲットバード|パークゴルフ|グラウンド・?ゴルフ|グランドゴルフ|グラウンド•ゴルフ|ground golf|マレット|ゲートボール|GOLFERS24|ドライビングレンジ|driving range|打席|ミニゴルフ|パターゴルフ|インドア|シミュレーション|シミュレーター|ゴルフスタジオ|golf studio|ゴルフスペース|ゴルフパートナー|ステップゴルフ|SMART GOLF|Round1|Asobi-bar)/i;
+  const COURSE = /(カントリー|ＣＣ|(?<![A-Z])CC|C\.C|倶楽部|俱楽部|ゴルフコース|Golf Course|Golf Club|リンクス|Links|ＧＣ|(?<![A-Z])GC|G\.C|ゴルフリゾート|ゴルフ[&＆]リゾート|Golf ?[&＆] ?Resort|Course|コース|ゴルフクラブ)/i;
+  const RANGE = /(ゴルフセンター|Gセンター|Golf ?Center|ガーデン|GARDEN|プラザ|PLAZA|レンジ|レインジ|RANGE|ドーム|広場|ゴルフパーク|GOLF PARK|ゴルフランド|ロングゴルフ|ゴルフレーン|LANE|スイング|SWING|24|ゴルフビレッジ|スタジアム|グリーンゴルフ|ゴルフ$|GOLF$|Golf$)/i;
+  const isCourse = n => !HARD.test(n) && (COURSE.test(n) || !RANGE.test(n));
   const $ = id => document.getElementById(id);
 
   // ---- storage helpers (may be unavailable) ----
@@ -192,13 +195,13 @@
   async function fetchCourses(prefCode){
     const key="gw-courses-"+prefCode;
     const c=store.get(key);
-    if(c && Date.now()-c.t < 30*24*3600*1000 && c.list && c.list.length) return c.list;
+    if(c && c.v===2 && Date.now()-c.t < 30*24*3600*1000 && c.list && c.list.length) return c.list.filter(x=>isCourse(x.name));
     // 1) アプリに同梱した一覧（毎月自動更新）を読む。速い。
     try{
       const res=await fetch("courses/"+prefCode+".json",{cache:"no-cache"});
       if(res.ok){
         const list=await res.json();
-        if(Array.isArray(list) && list.length){ store.set(key,{t:Date.now(),list}); return list; }
+        if(Array.isArray(list) && list.length){ const l=list.filter(x=>isCourse(x.name)); store.set(key,{v:2,t:Date.now(),list:l}); return l; }
       }
     }catch(e){}
     // 2) 同梱データがなければ OpenStreetMap に直接問い合わせる（遅い）
@@ -218,7 +221,7 @@
           const r2=await fetch(ep,{method:"POST",body:"data="+encodeURIComponent(q2),headers:{"Content-Type":"application/x-www-form-urlencoded"}});
           if(r2.ok) list=parseCourses((await r2.json()).elements||[]);
         }
-        store.set(key,{t:Date.now(),list});
+        store.set(key,{v:2,t:Date.now(),list});
         return list;
       }catch(e){ lastErr=e; }
     }
@@ -229,7 +232,7 @@
     for(const e of els){
       const t=e.tags||{};
       const name=(t["name:ja"]||t.name||"").trim();
-      if(!name || EXCLUDE.test(name)) continue;
+      if(!name || !isCourse(name) || t.golf==="driving_range") continue;
       const lat = e.lat ?? (e.center&&e.center.lat);
       const lon = e.lon ?? (e.center&&e.center.lon);
       if(lat==null||lon==null) continue;
