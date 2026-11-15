@@ -285,8 +285,9 @@
         return {hourly:{time:times, precipitation:sl(r.p).map(v=>v==null?null:v/10), precipitation_probability:sl(r.pp),
           weather_code:sl(r.c), temperature_2m:sl(r.t), wind_speed_10m:sl(r.w)}};
       });
-      if(out.some(x=>!x)) return null;
-      out.failed=0; out.generated=js.generated;
+      const miss=out.filter(x=>!x).length;
+      if(miss===out.length) return null;
+      out.failed=miss; out.generated=js.generated;
       return out;
     }catch(e){ return null; }
   }
