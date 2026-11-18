@@ -43,6 +43,7 @@ jobs:
             echo "変更なし"
           else
             git commit -m "ゴルフ場データを更新"
+            git pull --rebase origin main  # 実行中に main が進んでいても保存できるように
             git push origin HEAD:main
             gh workflow run update-weather.yml --ref main  # 新しい一覧で天気を取り直して公開
           fi

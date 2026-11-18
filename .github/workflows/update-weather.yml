@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,11 +33,14 @@ jobs:
           git fetch --depth=1 origin gh-pages && git checkout FETCH_HEAD -- weather || mkdir -p weather
       - name: 天気予報を取得（定時・手動実行のとき。失敗した県は前回分のまま）
         if: github.event_name != 'push'
+        timeout-minutes: 45      # 時間がかかっても、取れた県の分は次の手順で公開する
+        continue-on-error: true
         run: python -u tools/build_weather.py
       - name: gh-pages に公開
         run: |
           mkdir -p /tmp/site
           cp index.html manifest.webmanifest sw.js icon-192.png icon-512.png apple-touch-icon.png /tmp/site/
+          rm -f weather/*.tmp
           cp -r courses weather /tmp/site/
           touch /tmp/site/.nojekyll
           cd /tmp/site
