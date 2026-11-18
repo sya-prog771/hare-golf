@@ -176,7 +176,7 @@
     <ul>
       <li><b>雨なし</b>：選んだ時間帯に雨量0mm・降水確率が設定値以下・雨や雪の天気マークなし。</li>
       <li><b>微妙</b>：雨量1mm未満で、降水確率50%以下。</li>
-      <li><b>雨</b>：それ以外。</li>
+      <li><b>雨</b>：それ以外。1時間の最大雨量が少ない順に並びます。</li>
       <li>日付・時間・降水確率を変えると、その場で結果が変わります。</li>
       <li>日付の一覧で、晴れるゴルフ場が多い日（<b>最多</b>）がわかります。</li>
       <li>☆をタップするとお気に入りに登録できます。この端末にだけ保存されます。</li>
@@ -377,6 +377,7 @@
     }
     if(!hours.length) return null;
     const sum=hours.reduce((a,x)=>a+x.p,0);
+    const peak=hours.reduce((m,x)=>x.p>m.p?x:m, hours[0]);   // 1時間の雨量がいちばん多い時間
     const pps=hours.map(x=>x.pp).filter(v=>v!=null);
     const maxPP=pps.length?Math.max(...pps):null;
     const temps=hours.map(x=>x.t).filter(v=>v!=null);
@@ -386,7 +387,7 @@
     if(sum<0.1 && (maxPP==null||maxPP<=thr) && !anyWet) grade=0;   // 雨なし
     else if(sum<1 && (maxPP==null||maxPP<=50)) grade=1;              // 微妙
     else grade=2;                                                     // 雨
-    return {hours, sum, maxPP, grade,
+    return {hours, sum, maxPP, grade, pMax:peak.p, pMaxH:peak.h,
       tMin:temps.length?Math.min(...temps):null, tMax:temps.length?Math.max(...temps):null,
       wMax:winds.length?Math.max(...winds):null};
   }
@@ -479,7 +480,10 @@
     rows.sort((a,b)=>
       sort==="near" && a.km!=null ? a.km-b.km :
       sort==="name" ? a.c.name.localeCompare(b.c.name,"ja") :
-      (b.fav-a.fav) || (a.ev.maxPP??0)-(b.ev.maxPP??0) || a.ev.sum-b.ev.sum || a.c.name.localeCompare(b.c.name,"ja"));
+      (b.fav-a.fav) ||
+      // 「雨」は、1時間の最大雨量が少ない順（同じなら合計雨量・降水確率の少ない順）
+      (a.ev.grade===2 && b.ev.grade===2 ? a.ev.pMax-b.ev.pMax || a.ev.sum-b.ev.sum || (a.ev.maxPP??0)-(b.ev.maxPP??0) :
+        (a.ev.maxPP??0)-(b.ev.maxPP??0) || a.ev.sum-b.ev.sum) || a.c.name.localeCompare(b.c.name,"ja"));
 
     const cnt=[0,0,0]; rows.forEach(r=>cnt[r.ev.grade]++);
     // 最初の表示で「雨なし」が0件なら、いちばん良い結果のタブを開く
@@ -524,6 +528,7 @@
         <div class="stats">
           <span>降水確率 最大 <b>${e.maxPP!=null?e.maxPP+"%":"-"}</b></span>
           <span>雨量 <b>${e.sum.toFixed(1)}mm</b></span>
+          ${e.pMax>0?`<span>1時間の最大 <b>${e.pMax.toFixed(1)}mm</b>（${e.pMaxH-1}時台）</span>`:""}
           ${e.tMin!=null?`<span>気温 <b>${Math.round(e.tMin)}〜${Math.round(e.tMax)}℃</b></span>`:""}
           ${e.wMax!=null?`<span>風 最大 <b>${Math.round(e.wMax)}m/s</b></span>`:""}
         </div>
