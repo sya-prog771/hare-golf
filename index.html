@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="晴れゴルフ">
 <meta name="theme-color" content="#1f6f4a">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="都道府県と日付・時間を選ぶと、その時間に雨が降らなそうなゴルフ場を表示します。16日先まで、晴れるゴルフ場の多い日もわかります。">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -16,57 +17,96 @@
   :root{
     --bg:#f4f6f3; --card:#fff; --ink:#1d2621; --sub:#5d6b63; --line:#dfe5e0;
     --green:#1f6f4a; --green-soft:#e3f1e9; --amber:#a86a00; --amber-soft:#fbf0d9;
-    --red:#b23a3a; --red-soft:#f8e2e2;
+    --red:#b23a3a; --red-soft:#f8e2e2; --blue:#2a5fa8; --star:#d99a00;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#121714; --card:#1b221e; --ink:#e6ece8; --sub:#9aa8a0; --line:#2c3630;
+      --green:#3fa774; --green-soft:#1e3a2c; --amber:#e0a43a; --amber-soft:#3a2f1a;
+      --red:#e07070; --red-soft:#3d2224; --blue:#7fa8e6; --star:#f0b72f;
+    }
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
-  header{background:var(--green);color:#fff;padding:calc(16px + env(safe-area-inset-top)) 16px 14px}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:#1f6f4a;color:#fff;padding:calc(16px + env(safe-area-inset-top)) 16px 14px}
   header h1{margin:0;font-size:20px;letter-spacing:.02em}
   header p{margin:4px 0 0;font-size:12px;opacity:.85}
   main{max-width:720px;margin:0 auto;padding:12px}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
   label{display:block;font-size:12px;color:var(--sub);margin:0 0 4px}
-  select,input[type=date]{width:100%;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);appearance:none;-webkit-appearance:none;min-height:44px}
+  select,input[type=date],input[type=search]{width:100%;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);appearance:none;-webkit-appearance:none;min-height:44px;font-family:inherit}
+  select{background-image:linear-gradient(45deg,transparent 50%,var(--sub) 50%),linear-gradient(135deg,var(--sub) 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:28px}
   .defrow{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--sub)}
-  .defrow button{font-size:13px;padding:6px 10px;min-height:34px;border:1px solid var(--green);color:var(--green);background:#fff;border-radius:999px}
-  .defrow button:disabled{border-color:var(--line);color:var(--sub)}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .btn-o{font-size:13px;padding:6px 12px;min-height:34px;border:1px solid var(--green);color:var(--green);background:var(--card);border-radius:999px;font-family:inherit;cursor:pointer}
+  .btn-o:disabled{border-color:var(--line);color:var(--sub);cursor:default}
+  .row{margin-top:10px}
   .row3{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:end;margin-top:10px}
   .row3 .tilde{padding-bottom:12px;color:var(--sub)}
   .opts{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-top:12px;font-size:14px}
-  .opts select{width:auto;min-height:36px;padding:6px 10px;font-size:15px}
-  .chk{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink);margin:0}
-  .chk input{width:20px;height:20px}
-  button.go{width:100%;margin-top:14px;min-height:48px;font-size:17px;font-weight:700;color:#fff;background:var(--green);border:0;border-radius:12px}
+  .opts select{width:auto;min-height:36px;padding:6px 28px 6px 10px;font-size:15px}
+  button.go{width:100%;margin-top:14px;min-height:48px;font-size:17px;font-weight:700;color:#fff;background:#1f6f4a;border:0;border-radius:12px;font-family:inherit;cursor:pointer}
   button.go:disabled{opacity:.5}
-  .msg{margin:12px 2px;font-size:14px;color:var(--sub)}
+  .msg{margin:12px 2px;font-size:14px;color:var(--sub);line-height:1.6}
+  .msg small{font-size:12px}
   .err{color:var(--red)}
-  .tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:14px 0 10px;position:sticky;top:0;z-index:2;background:var(--bg);padding:6px 0}
-  .tab{min-height:44px;font-size:14px;font-weight:700;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--sub)}
+  .warn{color:var(--amber)}
+  h2{font-size:14px;margin:16px 2px 6px;color:var(--sub);font-weight:700}
+  .days{position:relative;display:flex;gap:6px;overflow-x:auto;padding:2px 2px 6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .day{flex:0 0 auto;width:62px;scroll-snap-align:start;text-align:center;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:6px 2px 7px;font-family:inherit;cursor:pointer;position:relative}
+  .day .d{font-size:12px;font-weight:700}
+  .day .d.sat{color:var(--blue)} .day .d.sun{color:var(--red)}
+  .day .n{font-size:17px;font-weight:700;margin-top:2px;color:var(--green)}
+  .day .n small{font-size:10px;color:var(--sub);font-weight:400}
+  .day .bar{height:5px;border-radius:3px;background:var(--red-soft);margin:5px 6px 0;overflow:hidden;display:flex}
+  .day .bar i{display:block;height:100%}
+  .day .bar .b0{background:var(--green)} .day .bar .b1{background:var(--amber)}
+  .day.on{border-color:var(--green);box-shadow:0 0 0 2px var(--green) inset;background:var(--green-soft)}
+  .day .best{position:absolute;top:-7px;right:-3px;font-size:10px;background:var(--star);color:#fff;border-radius:999px;padding:1px 5px;font-weight:700}
+  .tools{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:8px}
+  .tools .sub{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+  .tools select{width:auto;min-height:38px;padding:6px 28px 6px 10px;font-size:15px}
+  .chk{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink);margin:0;cursor:pointer}
+  .chk input{width:20px;height:20px;accent-color:#1f6f4a}
+  .tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0;position:sticky;top:0;z-index:2;background:var(--bg);padding:6px 0}
+  .tab{min-height:44px;font-size:14px;font-weight:700;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--sub);font-family:inherit;cursor:pointer}
   .tab.on.t0{background:var(--green);border-color:var(--green);color:#fff}
   .tab.on.t1{background:var(--amber);border-color:var(--amber);color:#fff}
   .tab.on.t2{background:var(--red);border-color:var(--red);color:#fff}
-  .pill{font-size:13px;padding:4px 10px;border-radius:999px;font-weight:600}
+  .pill{font-size:13px;padding:4px 10px;border-radius:999px;font-weight:600;white-space:nowrap}
   .ok{background:var(--green-soft);color:var(--green)}
   .mid{background:var(--amber-soft);color:var(--amber)}
   .ng{background:var(--red-soft);color:var(--red)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
   .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
-  .name{font-weight:700;font-size:16px;line-height:1.35}
+  .nm{display:flex;gap:4px;align-items:flex-start;min-width:0}
+  .fav{flex:0 0 auto;border:0;background:none;font-size:22px;line-height:1;padding:0 4px 0 0;color:var(--line);cursor:pointer;margin-top:-1px}
+  .fav.on{color:var(--star)}
+  .name{font-weight:700;font-size:16px;line-height:1.35;word-break:break-word}
   .name a{color:inherit;text-decoration:none}
   .name a::after{content:" ↗";font-size:12px;color:var(--sub)}
+  .city{font-size:12px;color:var(--sub);margin-top:2px}
+  .tags{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+  .tag{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--amber-soft);color:var(--amber);white-space:nowrap}
   .stats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--sub);margin-top:6px}
   .stats b{color:var(--ink);font-weight:600}
   .links{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  .links a{flex:1 1 0;min-width:120px;text-align:center;font-size:13px;font-weight:600;padding:8px 6px;border-radius:10px;border:1px solid var(--line);color:var(--ink);text-decoration:none;background:#fff}
+  .links a{flex:1 1 0;min-width:96px;text-align:center;font-size:13px;font-weight:600;padding:8px 6px;border-radius:10px;border:1px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)}
   .hours{display:flex;gap:4px;overflow-x:auto;margin-top:8px;padding-bottom:2px}
   .h{flex:0 0 auto;min-width:44px;text-align:center;font-size:11px;color:var(--sub);background:var(--bg);border-radius:8px;padding:4px 2px}
   .h .ic{font-size:18px;line-height:1.3}
   .h.wet{background:var(--red-soft);color:var(--red)}
-  footer{font-size:11px;color:var(--sub);text-align:center;padding:18px 12px 28px;line-height:1.6}
+  .more{width:100%;min-height:44px;font-size:14px;border:1px dashed var(--line);background:none;color:var(--sub);border-radius:12px;font-family:inherit;cursor:pointer}
+  .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1d2621;color:#fff;font-size:14px;padding:10px 16px;border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+  .toast.show{opacity:.92}
+  details.help{margin-top:16px;font-size:13px;color:var(--sub);line-height:1.7}
+  details.help summary{cursor:pointer;font-weight:700}
+  details.help ul{padding-left:1.2em;margin:6px 0}
+  footer{font-size:11px;color:var(--sub);text-align:center;padding:18px 12px calc(28px + env(safe-area-inset-bottom));line-height:1.6}
   footer a{color:var(--sub)}
-  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--green);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-2px;margin-right:6px}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--green);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
   @keyframes sp{to{transform:rotate(360deg)}}
+  [hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -80,14 +120,12 @@
     <select id="pref"></select>
     <div class="defrow">
       <span id="defNote"></span>
-      <button type="button" id="setDef">★ この都道府県をいつもの設定にする</button>
+      <button type="button" class="btn-o" id="setDef">★ この都道府県をいつもの設定にする</button>
     </div>
 
     <div class="row">
-      <div style="grid-column:1/-1">
-        <label for="date">日付（今日から16日先まで）</label>
-        <input type="date" id="date">
-      </div>
+      <label for="date">日付（今日から16日先まで）</label>
+      <input type="date" id="date">
     </div>
 
     <div class="row3">
@@ -98,7 +136,7 @@
 
     <div class="opts">
       <span>雨の判定：降水確率
-        <select id="thr">
+        <select id="thr" aria-label="雨なしと判定する降水確率">
           <option value="10">10%</option>
           <option value="20">20%</option>
           <option value="30" selected>30%</option>
@@ -110,74 +148,115 @@
     <button class="go" id="go" type="submit">晴れのゴルフ場をさがす</button>
   </form>
 
-  <div id="status" class="msg"></div>
-  <div id="summary" class="tabs" role="tablist"></div>
-  <div id="list"></div>
+  <div id="status" class="msg" role="status" aria-live="polite"></div>
+
+  <section id="result" hidden>
+    <h2>日ごとの「雨なし」ゴルフ場の数 <small style="font-weight:400">（タップで日付を変更）</small></h2>
+    <div id="days" class="days"></div>
+
+    <div class="tools">
+      <input type="search" id="q" placeholder="ゴルフ場名・市町村でしぼりこむ" aria-label="ゴルフ場名・市町村でしぼりこむ" enterkeyhint="search">
+      <button type="button" class="btn-o" id="share" style="min-height:44px">共有</button>
+      <div class="sub">
+        <select id="sort" aria-label="並び順">
+          <option value="rec">おすすめ順</option>
+          <option value="near">現在地から近い順</option>
+          <option value="name">名前順</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="favOnly"> ★お気に入りだけ</label>
+      </div>
+    </div>
+
+    <div id="summary" class="tabs" role="tablist"></div>
+    <div id="list"></div>
+  </section>
+
+  <details class="help">
+    <summary>使い方・判定のしかた</summary>
+    <ul>
+      <li><b>雨なし</b>：選んだ時間帯に雨量0mm・降水確率が設定値以下・雨や雪の天気マークなし。</li>
+      <li><b>微妙</b>：雨量1mm未満で、降水確率50%以下。</li>
+      <li><b>雨</b>：それ以外。</li>
+      <li>日付・時間・降水確率を変えると、その場で結果が変わります。</li>
+      <li>日付の一覧で、晴れるゴルフ場が多い日（<b>最多</b>）がわかります。</li>
+      <li>☆をタップするとお気に入りに登録できます。この端末にだけ保存されます。</li>
+      <li>天気予報は1日3回（5時・11時・18時ごろ）更新されます。</li>
+    </ul>
+  </details>
 </main>
 <footer>
   天気予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁などの予報モデル）／
   ゴルフ場一覧：国税庁「財産評価基準書（評価倍率表）」をもとに作成／位置：© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors・国土地理院<br>
   一部のゴルフ場は位置を市町村の中心で代用しています。予報は目安です。
 </footer>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
 (function(){
+  "use strict";
   const PREFS = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
-  const OVERPASS = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.private.coffee/api/interpreter"
-  ];
-  const HARD = /(練習|打ちっぱなし|打ちっ放し|ターゲットバード|パークゴルフ|グラウンド・?ゴルフ|グランドゴルフ|グラウンド•ゴルフ|ground golf|マレット|ゲートボール|GOLFERS24|ドライビングレンジ|driving range|打席|ミニゴルフ|パターゴルフ|インドア|シミュレーション|シミュレーター|ゴルフスタジオ|golf studio|ゴルフスペース|ゴルフパートナー|ステップゴルフ|SMART GOLF|Round1|Asobi-bar)/i;
-  const COURSE = /(カントリー|ＣＣ|(?<![A-Z])CC|C\.C|倶楽部|俱楽部|ゴルフコース|Golf Course|Golf Club|リンクス|Links|ＧＣ|(?<![A-Z])GC|G\.C|ゴルフリゾート|ゴルフ[&＆]リゾート|Golf ?[&＆] ?Resort|Course|コース|ゴルフクラブ)/i;
-  const RANGE = /(ゴルフセンター|Gセンター|Golf ?Center|ガーデン|GARDEN|プラザ|PLAZA|レンジ|レインジ|RANGE|ドーム|広場|ゴルフパーク|GOLF PARK|ゴルフランド|ロングゴルフ|ゴルフレーン|LANE|スイング|SWING|24|ゴルフビレッジ|スタジアム|グリーンゴルフ|ゴルフ$|GOLF$|Golf$)/i;
-  const isCourse = n => !HARD.test(n) && (COURSE.test(n) || !RANGE.test(n));
+  const WD = ["日","月","火","水","木","金","土"];
+  // 念のため、練習場・パークゴルフなどは表示しない
+  const HARD = /(練習|打ちっぱなし|打ちっ放し|ターゲットバード|パークゴルフ|グラウンド・?ゴルフ|グランドゴルフ|マレット|ゲートボール|GOLFERS24|ドライビングレンジ|driving range|ミニゴルフ|パターゴルフ|インドア|シミュレーション|シミュレーター|ゴルフスタジオ|golf studio|ステップゴルフ|SMART GOLF)/i;
+  const DAYS = 16, H_FROM = 6, H_TO = 20, PAGE = 40;
   const $ = id => document.getElementById(id);
 
-  // ---- storage helpers (may be unavailable) ----
+  // ---- 保存（使えない環境でも動くように） ----
   const store = {
     get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
     set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
   };
 
-  // ---- form setup ----
+  // ---- 日付（日本時間） ----
+  const jstYmd = (add=0) => new Date(Date.now() + 9*3600e3 + add*864e5).toISOString().slice(0,10);
+  const dayDiff = (a,b) => Math.round((Date.parse(a+"T00:00:00Z") - Date.parse(b+"T00:00:00Z"))/864e5);
+  const addDays = (d,n) => new Date(Date.parse(d+"T00:00:00Z") + n*864e5).toISOString().slice(0,10);
+  const wday = d => new Date(d+"T00:00:00Z").getUTCDay();
+  const md = d => (+d.slice(5,7))+"/"+(+d.slice(8,10));
+  const timeLabel = m => String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+
+  // ---- 設定 ----
+  const DEFAULT_PREF = "03"; // 岩手県
+  const settings = Object.assign({defaultPref: DEFAULT_PREF, thr:"30", start:480, end:960, sort:"rec"}, store.get("gw-settings") || {});
+  delete settings.pref; // 旧版の「前回の都道府県」は使わない
+  if(!PREFS[+settings.defaultPref-1]) settings.defaultPref = DEFAULT_PREF;
+  const saveSettings = () => store.set("gw-settings", settings);
+  const favs = new Set(store.get("gw-favs") || []);
+  const saveFavs = () => store.set("gw-favs", [...favs]);
+
+  // ---- フォーム ----
   PREFS.forEach((p,i)=>{
     const o=document.createElement("option");
     o.value=String(i+1).padStart(2,"0"); o.textContent=p; $("pref").appendChild(o);
   });
-  const DEFAULT_PREF = "03"; // 岩手県
-  const settings = Object.assign({defaultPref: DEFAULT_PREF}, store.get("gw-settings") || {});
-  delete settings.pref; // 旧版の「前回の都道府県」は使わない
-  if(!PREFS[+settings.defaultPref-1]) settings.defaultPref = DEFAULT_PREF;
-  function saveSettings(){ store.set("gw-settings", settings); }
-  $("pref").value = settings.defaultPref;
-  if(settings.thr) $("thr").value = settings.thr;
+  for(let m=5*60; m<=20*60; m+=30){
+    [$("start"),$("end")].forEach(sel=>{
+      const o=document.createElement("option"); o.value=m; o.textContent=timeLabel(m); sel.appendChild(o);
+    });
+  }
+  const today = jstYmd(0);
+  $("date").min = today; $("date").max = jstYmd(DAYS-1);
+
+  // URLの指定（共有リンク）＞ 保存した設定 ＞ 初期値
+  const qs = new URLSearchParams(location.search);
+  const validTime = v => v!=null && v!=="" && +v>=300 && +v<=1200 && +v%30===0;
+  $("pref").value = PREFS[+qs.get("pref")-1] ? qs.get("pref").padStart(2,"0") : settings.defaultPref;
+  $("date").value = (qs.get("date") && qs.get("date")>=$("date").min && qs.get("date")<=$("date").max) ? qs.get("date") : jstYmd(1);
+  $("start").value = validTime(qs.get("s")) ? qs.get("s") : settings.start;
+  $("end").value = validTime(qs.get("e")) ? qs.get("e") : settings.end;
+  if(["10","20","30","40","50"].includes(String(settings.thr))) $("thr").value = settings.thr;
+  $("sort").value = settings.sort==="near" ? "rec" : (settings.sort||"rec"); // 現在地は毎回確認する
+
   function updateDefUI(){
     $("defNote").textContent = "いつもの設定：" + PREFS[+settings.defaultPref-1];
     const same = $("pref").value === settings.defaultPref;
     $("setDef").disabled = same;
     $("setDef").textContent = same ? "✓ いつもの都道府県です" : "★ この都道府県をいつもの設定にする";
   }
-  $("pref").addEventListener("change", updateDefUI);
-  $("setDef").addEventListener("click", ()=>{ settings.defaultPref = $("pref").value; saveSettings(); updateDefUI(); });
+  $("setDef").addEventListener("click", ()=>{ settings.defaultPref = $("pref").value; saveSettings(); updateDefUI(); toast("いつもの都道府県を "+PREFS[+settings.defaultPref-1]+" にしました"); });
   updateDefUI();
 
-  function timeLabel(m){ return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); }
-  for(let m=5*60; m<=20*60; m+=30){
-    [$("start"),$("end")].forEach(sel=>{
-      const o=document.createElement("option"); o.value=m; o.textContent=timeLabel(m); sel.appendChild(o);
-    });
-  }
-  $("start").value = 8*60;
-  $("end").value = 16*60;
-
-  function ymd(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-  const today = new Date(); const maxD = new Date(); maxD.setDate(today.getDate()+15);
-  $("date").min = ymd(today); $("date").max = ymd(maxD);
-  const tmr = new Date(); tmr.setDate(today.getDate()+1);
-  $("date").value = ymd(tmr);
-
-  // ---- weather code ----
+  // ---- 天気 ----
   function wIcon(c){
     if(c===0) return "☀️";
     if(c===1||c===2) return "🌤️";
@@ -189,74 +268,53 @@
     if(c>=95) return "⛈️";
     return "・";
   }
-  function isWetCode(c){ return (c>=51&&c<=67)||(c>=71&&c<=86)||c>=95; }
+  const isWetCode = c => (c>=51&&c<=67)||(c>=71&&c<=86)||c>=95;
 
-  // ---- golf courses from OpenStreetMap ----
+  // ---- ゴルフ場一覧（アプリに同梱。毎月自動更新） ----
   async function fetchCourses(prefCode){
-    const key="gw-courses-"+prefCode;
-    const c=store.get(key);
-    if(c && c.v===2 && Date.now()-c.t < 30*24*3600*1000 && c.list && c.list.length) return c.list.filter(x=>isCourse(x.name));
-    // 1) アプリに同梱した一覧（毎月自動更新）を読む。速い。
-    try{
-      const res=await fetch("courses/"+prefCode+".json",{cache:"no-cache"});
-      if(res.ok){
-        const list=await res.json();
-        if(Array.isArray(list) && list.length){ const l=list.filter(x=>isCourse(x.name)); store.set(key,{v:2,t:Date.now(),list:l}); return l; }
-      }
-    }catch(e){}
-    // 2) 同梱データがなければ OpenStreetMap に直接問い合わせる（遅い）
-    const q = `[out:json][timeout:90];area["ISO3166-2"="JP-${prefCode}"]["admin_level"="4"]->.a;(way["leisure"="golf_course"](area.a);relation["leisure"="golf_course"](area.a);node["leisure"="golf_course"](area.a););out center tags;`;
-    let lastErr;
-    for(const ep of OVERPASS){
-      try{
-        const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),60000);
-        let res;
-        try{ res = await fetch(ep, {method:"POST", body:"data="+encodeURIComponent(q), headers:{"Content-Type":"application/x-www-form-urlencoded"}, signal:ctl.signal}); }
-        finally{ clearTimeout(timer); }
-        if(!res.ok) throw new Error("HTTP "+res.status);
-        const js = await res.json();
-        let list = parseCourses(js.elements||[]);
-        if(!list.length && !q.includes('"name"=')){ // ISOコードのない県は名前で再検索
-          const q2=q.replace(`area["ISO3166-2"="JP-${prefCode}"]`,`area["name"="${PREFS[+prefCode-1]}"]`);
-          const r2=await fetch(ep,{method:"POST",body:"data="+encodeURIComponent(q2),headers:{"Content-Type":"application/x-www-form-urlencoded"}});
-          if(r2.ok) list=parseCourses((await r2.json()).elements||[]);
-        }
-        store.set(key,{v:2,t:Date.now(),list});
-        return list;
-      }catch(e){ lastErr=e; }
-    }
-    throw new Error("ゴルフ場データを取得できませんでした（"+(lastErr&&lastErr.message||"通信エラー")+"）");
-  }
-  function parseCourses(els){
-    const byName=new Map();
-    for(const e of els){
-      const t=e.tags||{};
-      const name=(t["name:ja"]||t.name||"").trim();
-      if(!name || !isCourse(name) || t.golf==="driving_range") continue;
-      const lat = e.lat ?? (e.center&&e.center.lat);
-      const lon = e.lon ?? (e.center&&e.center.lon);
-      if(lat==null||lon==null) continue;
-      if(!byName.has(name)) byName.set(name,{name,lat,lon,n:1,web:t.website||t["contact:website"]||""});
-      else{ const o=byName.get(name); o.lat=(o.lat*o.n+lat)/(o.n+1); o.lon=(o.lon*o.n+lon)/(o.n+1); o.n++; }
-    }
-    return [...byName.values()].map(o=>({name:o.name,lat:+o.lat.toFixed(4),lon:+o.lon.toFixed(4),web:o.web}));
+    let res;
+    try{ res = await fetch("courses/"+prefCode+".json", {cache:"no-cache"}); }
+    catch(e){ throw new Error("ゴルフ場データを読み込めませんでした（通信エラー）"); }
+    if(!res.ok) throw new Error("ゴルフ場データを読み込めませんでした（HTTP "+res.status+"）");
+    const list = await res.json();
+    return (Array.isArray(list)?list:[]).filter(c=>c && c.name && !HARD.test(c.name) && c.lat!=null && c.lon!=null);
   }
 
-  // ---- weather from Open-Meteo ----
-  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  // 天気は「1日3回 GitHub 上でまとめて取得した予報（weather/XX.json）」を使う。
+  // 戻り値: {generated, start, hFrom, hTo, rows:[ゴルフ場ごとの予報 or null], source, stale}
+  async function fetchPrebuilt(prefCode, courses){
+    try{
+      const res = await fetch("weather/"+prefCode+".json", {cache:"no-cache"});
+      if(!res.ok) return null;
+      const js = await res.json();
+      if(!js.rows || !js.rows.length) return null;
+      const idx = new Map(js.names.map((n,i)=>[n,i]));
+      const rows = courses.map(c=>{
+        let i = idx.get(c.name);
+        if(i==null && js.lats){ // 名前がなければ15km以内のいちばん近い地点の予報を使う
+          let bd = 15;
+          js.lats.forEach((la,k)=>{ if(la==null) return; const d=distKm(c.lat,c.lon,la,js.lons[k]); if(d<bd){ bd=d; i=k; } });
+        }
+        return i==null ? null : js.rows[i];
+      });
+      if(rows.every(r=>!r)) return null;
+      const age = Date.now() - new Date(js.generated).getTime();
+      return {generated:js.generated, start:js.start, hFrom:js.hFrom, hTo:js.hTo, rows, source:"prebuilt", stale: !(age < 14*3600e3)};
+    }catch(e){ return null; }
+  }
+
+  // 同梱の予報が使えないときは、Open-Meteo に直接問い合わせる（16日分）
+  const sleep = ms => new Promise(r=>setTimeout(r,ms));
   async function getJSON(url, tries){
     let lastErr;
     for(let t=0;t<tries;t++){
-      const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),12000);
+      const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),15000);
       try{
         const res=await fetch(url,{signal:ctl.signal,cache:"no-store"});
-        if(!res.ok){
-          let reason=""; try{ reason=(await res.json()).reason||""; }catch(e){}
-          lastErr=new Error("HTTP "+res.status+(reason?" "+reason:""));
-          if(res.status>=400 && res.status<500 && res.status!==429) throw lastErr; // 条件の誤りは再試行しない
-        }else{
-          return await res.json();
-        }
+        if(res.ok) return await res.json();
+        let reason=""; try{ reason=(await res.json()).reason||""; }catch(e){}
+        lastErr=new Error("HTTP "+res.status+(reason?" "+reason:""));
+        if(res.status>=400 && res.status<500 && res.status!==429) throw lastErr;
       }catch(e){
         lastErr = e.name==="AbortError" ? new Error("タイムアウト") : e;
         if(/^HTTP 4(?!29)/.test(lastErr.message)) throw lastErr;
@@ -265,186 +323,304 @@
     }
     throw lastErr;
   }
-  // GitHub上で1日3回まとめて取得した予報（weather/XX.json）を使う。速くて確実。
-  async function fetchPrebuilt(prefCode, courses, date){
-    try{
-      const res=await fetch("weather/"+prefCode+".json",{cache:"no-cache"});
-      if(!res.ok) return null;
-      const js=await res.json();
-      const age=Date.now()-new Date(js.generated).getTime();
-      if(!(age < 14*3600*1000)) return null;                       // 古すぎる
-      const per=js.hTo-js.hFrom+1;
-      const day=Math.round((new Date(date+"T00:00:00+09:00")-new Date(js.start+"T00:00:00+09:00"))/86400000);
-      if(day<0 || (day+1)*per > js.rows[0].p.length) return null;  // 範囲外
-      const idx=new Map(js.names.map((n,i)=>[n,i]));
-      const times=[]; for(let h=js.hFrom;h<=js.hTo;h++) times.push(date+"T"+String(h).padStart(2,"0")+":00");
-      const sl=a=>a.slice(day*per,(day+1)*per);
-      const out=courses.map(c=>{
-        let i=idx.get(c.name);
-        if(i==null && js.lats){ // 名前がなければ15km以内のいちばん近い地点の予報を使う
-          let best=-1, bd=15;
-          js.lats.forEach((la,k)=>{ if(la==null) return; const dy=(la-c.lat)*111, dx=(js.lons[k]-c.lon)*111*Math.cos(c.lat*Math.PI/180); const d=Math.hypot(dx,dy); if(d<bd){bd=d;best=k;} });
-          if(best>=0) i=best;
-        }
-        if(i==null) return null;
-        const r=js.rows[i];
-        return {hourly:{time:times, precipitation:sl(r.p).map(v=>v==null?null:v/10), precipitation_probability:sl(r.pp),
-          weather_code:sl(r.c), temperature_2m:sl(r.t), wind_speed_10m:sl(r.w)}};
-      });
-      const miss=out.filter(x=>!x).length;
-      if(miss===out.length) return null;
-      out.failed=miss; out.generated=js.generated;
-      return out;
-    }catch(e){ return null; }
+  function pack(w){
+    const H=w.hourly, keep=[];
+    H.time.forEach((t,i)=>{ const h=+t.slice(11,13); if(h>=H_FROM && h<=H_TO) keep.push(i); });
+    const col=(k,s=1)=>keep.map(i=>H[k][i]==null?null:Math.round(H[k][i]*s));
+    return {p:col("precipitation",10), pp:col("precipitation_probability"), c:col("weather_code"), t:col("temperature_2m"), w:col("wind_speed_10m")};
   }
-
-  async function fetchWeather(courses, date){
-    // 30分以内に同じ県・日付で取った天気は使い回す
-    const wkey="gw-weather-"+date+"-"+courses.length+"-"+courses[0].lat;
-    const cached=store.get(wkey);
-    if(cached && Date.now()-cached.t < 30*60*1000 && cached.list.length===courses.length) return cached.list;
-    const out=new Array(courses.length).fill(null); const CH=20; let failed=0, lastErr=null, done=0;
-    const jobs=[];
+  async function fetchDirect(prefCode, courses){
+    const key="gw-direct-"+prefCode;
+    const cached=store.get(key);
+    if(cached && Date.now()-cached.t < 30*60e3 && cached.n===courses.length && cached.first===courses[0].name) return cached.data;
+    const rows=new Array(courses.length).fill(null), CH=20, jobs=[];
+    let failed=0, lastErr=null, done=0, start=null;
     for(let i=0;i<courses.length;i+=CH) jobs.push(i);
     async function run(i){
       const part=courses.slice(i,i+CH);
       const url="https://api.open-meteo.com/v1/forecast?latitude="+part.map(c=>c.lat).join(",")+
         "&longitude="+part.map(c=>c.lon).join(",")+
         "&hourly=precipitation,precipitation_probability,weather_code,temperature_2m,wind_speed_10m"+
-        "&timezone=Asia%2FTokyo&wind_speed_unit=ms&start_date="+date+"&end_date="+date;
+        "&timezone=Asia%2FTokyo&wind_speed_unit=ms&forecast_days="+DAYS;
       try{
         const js=await getJSON(url,3);
-        const arr=Array.isArray(js)?js:[js];
-        arr.forEach((w,k)=>{ out[i+k]=w; });
+        (Array.isArray(js)?js:[js]).forEach((w,k)=>{ rows[i+k]=pack(w); start=start||w.hourly.time[0].slice(0,10); });
       }catch(e){ failed+=part.length; lastErr=e; }
       done+=part.length;
-      setStatus(`<span class="spinner"></span>天気を確認中… ${done} / ${courses.length}`);
+      setStatus(`<span class="spinner"></span>天気予報サーバーに問い合わせ中… ${done} / ${courses.length}`);
     }
-    // 3本ずつ同時に問い合わせる
-    const workers=[0,1,2].map(async()=>{ while(jobs.length){ await run(jobs.shift()); } });
-    await Promise.all(workers);
-    if(failed===courses.length){
-      throw new Error("天気予報サーバー（Open-Meteo）に接続できませんでした（"+(lastErr&&lastErr.message||"通信エラー")+"）");
-    }
-    if(!failed) store.set(wkey,{t:Date.now(),list:out});
-    out.failed=failed;
-    return out;
+    await Promise.all([0,1,2].map(async()=>{ while(jobs.length) await run(jobs.shift()); }));
+    if(failed===courses.length) throw new Error("天気予報サーバー（Open-Meteo）に接続できませんでした（"+(lastErr&&lastErr.message||"通信エラー")+"）");
+    const data={generated:new Date().toISOString(), start, hFrom:H_FROM, hTo:H_TO, rows, source:"direct", stale:false};
+    if(!failed) store.set(key,{t:Date.now(), n:courses.length, first:courses[0].name, data});
+    return data;
   }
 
-  // Open-Meteo hourly precip = "preceding hour". Label h covers (h-1):00〜h:00.
-  function evaluate(w, startMin, endMin, thr){
-    const H=w.hourly; const hours=[];
-    const hFrom=Math.floor(startMin/60)+1, hTo=Math.ceil(endMin/60);
-    for(let idx=0; idx<H.time.length; idx++){
-      const h=parseInt(H.time[idx].slice(11,13),10);
-      if(h>=hFrom && h<=hTo){
-        hours.push({h, p:H.precipitation[idx]??0, pp:H.precipitation_probability[idx], c:H.weather_code[idx], t:H.temperature_2m[idx], ws:H.wind_speed_10m[idx]});
-      }
+  async function fetchWeather(prefCode, courses){
+    const pre = await fetchPrebuilt(prefCode, courses);
+    if(pre && !pre.stale) return pre;
+    try{ return await fetchDirect(prefCode, courses); }
+    catch(e){ if(pre) return pre; throw e; } // 直接取れなければ、古くても同梱の予報を使う
+  }
+
+  // ---- 判定 ----
+  // Open-Meteo の1時間ごとの値は「直前の1時間」。ラベル h は (h-1):00〜h:00 を表す。
+  function evaluate(row, W, day, startMin, endMin, thr){
+    if(!row || day<0) return null;
+    const per=W.hTo-W.hFrom+1;
+    const hFrom=Math.max(Math.floor(startMin/60)+1, W.hFrom), hTo=Math.min(Math.ceil(endMin/60), W.hTo);
+    const hours=[];
+    for(let h=hFrom; h<=hTo; h++){
+      const i=day*per+(h-W.hFrom);
+      if(i>=row.pp.length) return null;
+      hours.push({h, p:row.p[i]==null?0:row.p[i]/10, pp:row.pp[i], c:row.c[i], t:row.t[i], ws:row.w[i]});
     }
     if(!hours.length) return null;
-    const sum=hours.reduce((a,x)=>a+(x.p||0),0);
+    const sum=hours.reduce((a,x)=>a+x.p,0);
     const pps=hours.map(x=>x.pp).filter(v=>v!=null);
     const maxPP=pps.length?Math.max(...pps):null;
     const temps=hours.map(x=>x.t).filter(v=>v!=null);
     const winds=hours.map(x=>x.ws).filter(v=>v!=null);
-    const anyWetCode=hours.some(x=>isWetCode(x.c));
+    const anyWet=hours.some(x=>isWetCode(x.c));
     let grade;
-    if(sum<0.1 && (maxPP==null||maxPP<=thr) && !anyWetCode) grade=0;      // 雨なし
-    else if(sum<1 && (maxPP==null||maxPP<=50)) grade=1;                    // 微妙
-    else grade=2;                                                          // 雨
-    return {hours,sum,maxPP,tMin:Math.min(...temps),tMax:Math.max(...temps),wMax:winds.length?Math.max(...winds):null,grade};
+    if(sum<0.1 && (maxPP==null||maxPP<=thr) && !anyWet) grade=0;   // 雨なし
+    else if(sum<1 && (maxPP==null||maxPP<=50)) grade=1;              // 微妙
+    else grade=2;                                                     // 雨
+    return {hours, sum, maxPP, grade,
+      tMin:temps.length?Math.min(...temps):null, tMax:temps.length?Math.max(...temps):null,
+      wMax:winds.length?Math.max(...winds):null};
   }
 
-  // ---- UI ----
-  function setStatus(html,isErr){ $("status").innerHTML=html; $("status").className="msg"+(isErr?" err":""); }
-  function esc(s){ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  // ---- 位置 ----
+  function distKm(la1,lo1,la2,lo2){
+    const dy=(la1-la2)*111, dx=(lo1-lo2)*111*Math.cos(la1*Math.PI/180);
+    return Math.hypot(dx,dy);
+  }
+  let here=null;
+  function locate(){
+    return new Promise((ok,ng)=>{
+      if(!navigator.geolocation) return ng(new Error("この端末では現在地を使えません"));
+      navigator.geolocation.getCurrentPosition(
+        p=>ok({lat:p.coords.latitude, lon:p.coords.longitude}),
+        e=>ng(new Error(e.code===1?"現在地の利用が許可されていません":"現在地を取得できませんでした")),
+        {enableHighAccuracy:false, timeout:15000, maximumAge:10*60e3});
+    });
+  }
 
-  let last=null, tab=0;
-  const gs=q=>"https://www.google.com/search?q="+encodeURIComponent(q);
+  // ---- 画面 ----
+  function setStatus(html,cls){ $("status").innerHTML=html; $("status").className="msg"+(cls?" "+cls:""); }
+  const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  let toastTimer;
+  function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2200); }
+  const gs = q => "https://www.google.com/search?q="+encodeURIComponent(q);
+  const favKey = (pref,name) => pref+"|"+name;
+
+  // data: 読み込んだ県のゴルフ場と予報。view: 表示中の条件での判定結果
+  let data=null, tab=0, shown=PAGE, autoTab=true;
+
+  function params(){
+    return {date:$("date").value, startMin:+$("start").value, endMin:+$("end").value, thr:+$("thr").value};
+  }
+  function syncURL(){
+    if(!data) return;
+    const p=params();
+    const u=new URL(location.href);
+    u.search=new URLSearchParams({pref:data.prefCode, date:p.date, s:p.startMin, e:p.endMin}).toString();
+    try{ history.replaceState(null,"",u); }catch(e){}
+  }
+
+  function availableDays(){
+    if(!data) return [];
+    const W=data.W, out=[];
+    const first=Math.max(0, dayDiff(today, W.start));
+    const len=data.W.rows.find(r=>r).pp.length/(W.hTo-W.hFrom+1);
+    for(let d=first; d<len && out.length<DAYS; d++) out.push({day:d, date:addDays(W.start,d)});
+    return out;
+  }
+
+  function renderDays(){
+    const p=params();
+    const days=availableDays().map(x=>{
+      const cnt=[0,0,0];
+      data.courses.forEach((c,i)=>{ const e=evaluate(data.W.rows[i], data.W, x.day, p.startMin, p.endMin, p.thr); if(e) cnt[e.grade]++; });
+      return Object.assign(x,{cnt, total:cnt[0]+cnt[1]+cnt[2]});
+    });
+    const best=Math.max(0,...days.map(x=>x.cnt[0]));
+    $("days").innerHTML=days.map(x=>{
+      const w=wday(x.date), tot=x.total||1;
+      return `<button type="button" class="day${x.date===p.date?" on":""}" data-date="${x.date}" aria-pressed="${x.date===p.date}" aria-label="${md(x.date)}（${WD[w]}） 雨なし${x.cnt[0]}か所">
+        ${best>0 && x.cnt[0]===best?'<span class="best">最多</span>':""}
+        <div class="d${w===6?" sat":w===0?" sun":""}">${x.date===today?"今日":md(x.date)}<br>${WD[w]}</div>
+        <div class="n">${x.cnt[0]}<small>か所</small></div>
+        <div class="bar"><i class="b0" style="width:${x.cnt[0]/tot*100}%"></i><i class="b1" style="width:${x.cnt[1]/tot*100}%"></i></div>
+      </button>`;
+    }).join("");
+    const on=$("days").querySelector(".day.on");
+    if(on){ const box=$("days"); box.scrollLeft=on.offsetLeft-box.clientWidth/2+on.offsetWidth/2; }
+  }
+
   function render(){
-    if(!last) return;
-    const {rows,prefName,date,startMin,endMin}=last;
+    if(!data) return;
+    const p=params(), W=data.W, day=dayDiff(p.date, W.start);
+    $("result").hidden=false;
+    renderDays();
+
+    let rows=[];
+    data.courses.forEach((c,i)=>{
+      const ev=evaluate(W.rows[i], W, day, p.startMin, p.endMin, p.thr);
+      if(ev) rows.push({c, ev, fav:favs.has(favKey(data.prefCode,c.name)), km: here?distKm(here.lat,here.lon,c.lat,c.lon):null});
+    });
+    const total=rows.length;
+    const q=$("q").value.trim().normalize("NFKC").toLowerCase();
+    if(q) rows=rows.filter(r=>(r.c.name+" "+(r.c.city||"")).normalize("NFKC").toLowerCase().includes(q));
+    if($("favOnly").checked) rows=rows.filter(r=>r.fav);
+
+    const sort=$("sort").value;
+    rows.sort((a,b)=>
+      sort==="near" && a.km!=null ? a.km-b.km :
+      sort==="name" ? a.c.name.localeCompare(b.c.name,"ja") :
+      (b.fav-a.fav) || (a.ev.maxPP??0)-(b.ev.maxPP??0) || a.ev.sum-b.ev.sum || a.c.name.localeCompare(b.c.name,"ja"));
+
     const cnt=[0,0,0]; rows.forEach(r=>cnt[r.ev.grade]++);
+    // 最初の表示で「雨なし」が0件なら、いちばん良い結果のタブを開く
+    if(autoTab){ tab = cnt[0] ? 0 : cnt[1] ? 1 : cnt[2] ? 2 : 0; autoTab=false; }
     const names=["☀️ 雨なし","🌥️ 微妙","☔ 雨"];
     $("summary").innerHTML=names.map((n,i)=>`<button type="button" role="tab" class="tab t${i}${tab===i?" on":""}" data-tab="${i}" aria-selected="${tab===i}">${n} ${cnt[i]}</button>`).join("");
+
+    let st=`<b>${esc(data.prefName)}</b>・${md(p.date)}（${WD[wday(p.date)]}）・${timeLabel(p.startMin)}〜${timeLabel(p.endMin)}：全${total}か所`;
+    if(q || $("favOnly").checked) st+=`（しぼりこみ ${rows.length}か所）`;
+    const g=new Date(W.generated);
+    if(!isNaN(g)) st+=`<br><small>予報の取得：${g.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}${W.source==="direct"?"（天気予報サーバーから直接）":""}</small>`;
+    if(W.stale) st+=`<br><span class="warn">※ 最新の予報を取得できなかったため、少し前の予報を表示しています。</span>`;
+    const miss=data.courses.length-total;
+    if(miss>0) st+=`<br><small>※ ${miss}か所はこの日の予報がないため一覧から外しています。</small>`;
+    setStatus(st);
+
     const show=rows.filter(r=>r.ev.grade===tab);
-    setStatus(`${prefName}・${date.replace(/-/g,"/")}・${timeLabel(startMin)}〜${timeLabel(endMin)}：全${rows.length}か所`);
     if(!show.length){
-      const emp=["雨なしのゴルフ場は見つかりませんでした。判定の降水確率を上げるか、「微妙」タブも見てみてください。","「微妙」のゴルフ場はありません。","雨のゴルフ場はありません。"];
-      $("list").innerHTML=`<div class="card">${emp[tab]}</div>`;
+      const emp = (q || $("favOnly").checked) ? "条件に合うゴルフ場はありません。しぼりこみを外してみてください。" :
+        ["雨なしのゴルフ場は見つかりませんでした。判定の降水確率を上げるか、「微妙」タブや他の日も見てみてください。","「微妙」のゴルフ場はありません。","雨のゴルフ場はありません。"][tab];
+      $("list").innerHTML=`<div class="card">${emp}</div>`;
       return;
     }
     const labels=["雨なし","微妙","雨"], cls=["ok","mid","ng"];
-    $("list").innerHTML=show.map(r=>{
-      const e=r.ev;
-      const map="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(r.c.name+" "+prefName);
+    const html=show.slice(0,shown).map(r=>{
+      const e=r.ev, c=r.c;
+      const map="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(c.name+" "+data.prefName+(c.city||""));
       const hrs=e.hours.map(x=>`<div class="h${(x.p>=0.1||isWetCode(x.c))?" wet":""}"><div>${x.h-1}時</div><div class="ic">${wIcon(x.c)}</div><div>${x.pp!=null?x.pp+"%":"-"}</div></div>`).join("");
+      const tags=[];
+      if(e.wMax!=null && e.wMax>=8) tags.push("💨 風が強い");
+      if(e.tMin!=null && e.tMin<=3) tags.push("🥶 寒い");
+      if(e.tMax!=null && e.tMax>=33) tags.push("🥵 暑い");
       return `<div class="card">
-        <div class="top"><div class="name"><a href="${map}" target="_blank" rel="noopener">${esc(r.c.name)}</a></div>
-        <span class="pill ${cls[e.grade]}">${labels[e.grade]}</span></div>
+        <div class="top">
+          <div class="nm">
+            <button type="button" class="fav${r.fav?" on":""}" data-fav="${esc(c.name)}" aria-pressed="${r.fav}" aria-label="お気に入り">${r.fav?"★":"☆"}</button>
+            <div><div class="name"><a href="${map}" target="_blank" rel="noopener">${esc(c.name)}</a></div>
+            ${c.city||r.km!=null?`<div class="city">${c.city?esc(c.city):""}${c.approx?"（位置はおおよそ）":""}${r.km!=null?`${c.city?"・":""}現在地から約${r.km<10?r.km.toFixed(1):Math.round(r.km)}km`:""}</div>`:""}</div>
+          </div>
+          <div class="tags"><span class="pill ${cls[e.grade]}">${labels[e.grade]}</span>${tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>
+        </div>
         <div class="stats">
           <span>降水確率 最大 <b>${e.maxPP!=null?e.maxPP+"%":"-"}</b></span>
           <span>雨量 <b>${e.sum.toFixed(1)}mm</b></span>
-          <span>気温 <b>${Math.round(e.tMin)}〜${Math.round(e.tMax)}℃</b></span>
-          ${e.wMax!=null?`<span>風 最大 <b>${e.wMax.toFixed(0)}m/s</b></span>`:""}
+          ${e.tMin!=null?`<span>気温 <b>${Math.round(e.tMin)}〜${Math.round(e.tMax)}℃</b></span>`:""}
+          ${e.wMax!=null?`<span>風 最大 <b>${Math.round(e.wMax)}m/s</b></span>`:""}
         </div>
         <div class="hours">${hrs}</div>
         <div class="links">
-          <a href="${gs(r.c.name+" ゴル天 天気")}" target="_blank" rel="noopener">⛳ ゴル天</a>
-          <a href="${gs("site:weathernews.jp/golf "+r.c.name)}" target="_blank" rel="noopener">🌤️ ウェザーニュース</a>
+          <a href="${gs(c.name+" ゴル天 天気")}" target="_blank" rel="noopener">⛳ ゴル天</a>
+          <a href="${gs("site:weathernews.jp/golf "+c.name)}" target="_blank" rel="noopener">🌤️ ウェザーニュース</a>
+          <a href="${gs(c.name+" 予約")}" target="_blank" rel="noopener">📅 予約</a>
         </div>
       </div>`;
     }).join("");
+    $("list").innerHTML = html + (show.length>shown ? `<button type="button" class="more" id="more">もっと見る（残り${show.length-shown}か所）</button>` : "");
   }
 
-  $("summary").addEventListener("click",e=>{
-    const b=e.target.closest(".tab"); if(!b) return;
-    tab=+b.dataset.tab; render();
-  });
-  $("thr").addEventListener("change",()=>{
-    if(!last) return;
-    const thr=+$("thr").value;
-    last.rows.forEach(r=>{ r.ev=evaluate(r.w,last.startMin,last.endMin,thr); });
-    sortRows(last.rows); render();
-    settings.thr=$("thr").value; saveSettings();
-  });
-  function sortRows(rows){
-    rows.sort((a,b)=>a.ev.grade-b.ev.grade || (a.ev.maxPP??0)-(b.ev.maxPP??0) || a.ev.sum-b.ev.sum || a.c.name.localeCompare(b.c.name,"ja"));
-  }
-
-  $("form").addEventListener("submit", async ev=>{
-    ev.preventDefault();
+  // ---- 検索 ----
+  let loading=null;
+  async function load(){
     const prefCode=$("pref").value, prefName=PREFS[+prefCode-1];
-    const date=$("date").value, startMin=+$("start").value, endMin=+$("end").value, thr=+$("thr").value;
-    $("summary").innerHTML=""; $("list").innerHTML="";
-    if(!date){ setStatus("日付を選んでください。",true); return; }
-    if(date<$("date").min || date>$("date").max){ setStatus("日付は今日から16日先までで選んでください。",true); return; }
-    if(endMin<=startMin){ setStatus("終了時間は開始時間より後にしてください。",true); return; }
-    settings.thr=$("thr").value; saveSettings();
+    const p=params();
+    if(!p.date){ setStatus("日付を選んでください。","err"); return; }
+    if(p.date<$("date").min || p.date>$("date").max){ setStatus("日付は今日から16日先までで選んでください。","err"); return; }
+    if(p.endMin<=p.startMin){ setStatus("終了時間は開始時間より後にしてください。","err"); return; }
+    const token={}; loading=token;
     $("go").disabled=true;
     try{
-      setStatus(`<span class="spinner"></span>${prefName}のゴルフ場を探しています…（初回は数十秒かかることがあります）`);
-      const t0=performance.now();
+      setStatus(`<span class="spinner"></span>${prefName}のゴルフ場と天気予報を読み込んでいます…`);
       const courses=await fetchCourses(prefCode);
-      const t1=performance.now();
-      if(!courses.length){ setStatus(prefName+"のゴルフ場データが見つかりませんでした。",true); return; }
-      setStatus(`<span class="spinner"></span>天気を確認中… 0 / ${courses.length}`);
-      const ws=(await fetchPrebuilt(prefCode,courses,date)) || (await fetchWeather(courses,date));
-      const t2=performance.now();
-      const rows=[];
-      courses.forEach((c,i)=>{ const w=ws[i]; if(!w||!w.hourly) return; const e=evaluate(w,startMin,endMin,thr); if(e) rows.push({c,w,ev:e}); });
-      sortRows(rows);
-      last={rows,prefCode,prefName,date,startMin,endMin}; tab=0;
-      render();
-      $("status").innerHTML+=`<br><small>（ゴルフ場 ${((t1-t0)/1000).toFixed(1)}秒・天気 ${((t2-t1)/1000).toFixed(1)}秒）</small>`;
-      if(ws.generated) $("status").innerHTML+=`<small>　予報の取得：${ws.generated.slice(5,10).replace('-','/')} ${ws.generated.slice(11,16)}</small>`;
-      if(ws.failed) $("status").innerHTML+=`<br><span class="err">※ ${ws.failed}か所は天気を取得できず、一覧から外しています。</span>`;
+      if(loading!==token) return;
+      if(!courses.length){ setStatus(prefName+"のゴルフ場データが見つかりませんでした。","err"); $("result").hidden=true; return; }
+      const W=await fetchWeather(prefCode, courses);
+      if(loading!==token) return;
+      data={prefCode, prefName, courses, W};
+      tab=0; shown=PAGE; autoTab=true;
+      render(); syncURL();
     }catch(e){
-      setStatus(esc(e.message||"エラーが発生しました")+"。電波の良い場所で、少し時間をおいて試してください。",true);
+      if(loading!==token) return;
+      $("result").hidden=true; data=null;
+      setStatus(esc(e.message||"エラーが発生しました")+"。電波の良い場所で、少し時間をおいて試してください。","err");
     }finally{
-      $("go").disabled=false;
+      if(loading===token) $("go").disabled=false;
     }
+  }
+
+  // 条件を変えたら、読み込み済みのデータでその場で判定し直す
+  function recheck(){
+    const p=params();
+    settings.thr=$("thr").value; settings.start=p.startMin; settings.end=p.endMin; saveSettings();
+    if(!data) return;
+    if(p.endMin<=p.startMin){ setStatus("終了時間は開始時間より後にしてください。","err"); $("summary").innerHTML=""; $("list").innerHTML=""; return; }
+    if(!p.date || p.date<$("date").min || p.date>$("date").max){ setStatus("日付は今日から16日先までで選んでください。","err"); return; }
+    shown=PAGE; autoTab=true; render(); syncURL();
+  }
+
+  $("form").addEventListener("submit", ev=>{ ev.preventDefault(); load(); });
+  $("pref").addEventListener("change", ()=>{ updateDefUI(); $("q").value=""; load(); });
+  ["date","start","end","thr"].forEach(id=>$(id).addEventListener("change", recheck));
+  $("days").addEventListener("click", e=>{
+    const b=e.target.closest(".day"); if(!b) return;
+    $("date").value=b.dataset.date; recheck();
   });
+  $("summary").addEventListener("click", e=>{
+    const b=e.target.closest(".tab"); if(!b) return;
+    tab=+b.dataset.tab; shown=PAGE; render();
+  });
+  $("list").addEventListener("click", e=>{
+    const f=e.target.closest(".fav");
+    if(f){
+      const k=favKey(data.prefCode, f.dataset.fav);
+      if(favs.has(k)){ favs.delete(k); toast("お気に入りから外しました"); } else { favs.add(k); toast("お気に入りに追加しました"); }
+      saveFavs(); render(); return;
+    }
+    if(e.target.id==="more"){ shown+=PAGE; render(); }
+  });
+  let qTimer;
+  $("q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(()=>{ shown=PAGE; render(); },150); });
+  $("favOnly").addEventListener("change", ()=>{ shown=PAGE; render(); });
+  $("sort").addEventListener("change", async ()=>{
+    const v=$("sort").value;
+    if(v==="near" && !here){
+      setStatus(`<span class="spinner"></span>現在地を確認しています…`);
+      try{ here=await locate(); }
+      catch(e){ $("sort").value="rec"; render(); toast(e.message); return; }
+    }
+    settings.sort=v; saveSettings(); shown=PAGE; render();
+  });
+  $("share").addEventListener("click", async ()=>{
+    syncURL();
+    const p=params();
+    const title=`晴れゴルフ：${data?data.prefName:""} ${md(p.date)}（${WD[wday(p.date)]}）${timeLabel(p.startMin)}〜${timeLabel(p.endMin)}`;
+    try{
+      if(navigator.share){ await navigator.share({title, text:title, url:location.href}); return; }
+      await navigator.clipboard.writeText(title+"\n"+location.href);
+      toast("リンクをコピーしました");
+    }catch(e){ if(e && e.name!=="AbortError") toast("共有できませんでした"); }
+  });
+
+  load(); // 開いたらすぐ、いつもの都道府県で表示する
 })();
 </script>
 <script>
