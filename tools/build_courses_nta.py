@@ -6,6 +6,7 @@
 - OpenStreetMap（地図データ）: leisure=golf_course。取得できたら tools/osm_snapshot に保存し、
   取得できなければ保存済みのスナップショットを使う。
 - Wikipedia: 都道府県別カテゴリにあるゴルフ場の記事（座標つき）。tools/wikipedia_snapshot.json に保存。
+  取得に時間がかかるため、REFRESH_WIKIPEDIA=1 のときだけ取り直す。
 - 国土地理院の住所検索: 市町村の位置と、一部のゴルフ場名の位置。
 
 位置は、地図データ・Wikipedia・国土地理院に同じ名前があればその場所、なければ所在市町村の位置
@@ -362,7 +363,7 @@ def wp_members(cat, typ):
 def wikipedia():
     """{県コード: [{"name","lat","lon"}]}。取れなければ前回の保存分"""
     old = json.load(open(WP_SNAPSHOT, encoding="utf-8")) if os.path.exists(WP_SNAPSHOT) else {}
-    if os.environ.get("SKIP_WIKIPEDIA") == "1":
+    if os.environ.get("REFRESH_WIKIPEDIA") != "1":  # 取得に時間がかかるので、ふだんは保存分を使う
         return old
     try:
         res = {}

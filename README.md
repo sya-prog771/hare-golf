@@ -15,7 +15,8 @@
 | ファイル | 内容 |
 | --- | --- |
 | `index.html` | アプリ本体（1ファイル） |
-| `courses/XX.json` | 都道府県別ゴルフ場一覧。国税庁の評価倍率表（ゴルフ場用地等用）から `tools/build_courses_nta.py` で作成（毎月自動更新） |
+| `courses/XX.json` | 都道府県別ゴルフ場一覧。国税庁の評価倍率表（ゴルフ場用地等用）・OpenStreetMap・Wikipedia・国土地理院から `tools/build_courses_nta.py` で作成（毎月自動更新） |
+| `tools/osm_snapshot`・`tools/wikipedia_snapshot.json` | 地図データ（毎月取り直し）と Wikipedia（手動で取り直し）の控え。国税庁の表に名前がない県を補う |
 | `weather/XX.json` | 全ゴルフ場の16日予報。`tools/build_weather.py` が Open-Meteo から1日3回取得（gh-pages にのみ置く） |
 | `.github/workflows/` | 上記の自動更新と、gh-pages ブランチへの公開 |
 
