@@ -266,6 +266,7 @@ def gsi_course(name, center):
 # ---------------------------------------------------------------- 地図データ（OpenStreetMap）
 
 OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
+OSM_FAILS = {"n": 0}  # 続けて取れなかった県の数。3県続いたら地図データのサービスが止まっているとみなす
 
 
 def osm_fetch(code):
@@ -315,8 +316,11 @@ def osm_fetch(code):
 def osm_list(code):
     path = os.path.join(HERE, "osm_snapshot", f"{code}.json")
     snap = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else []
-    if os.environ.get("SKIP_OSM") != "1":
+    if os.environ.get("SKIP_OSM") != "1" and OSM_FAILS["n"] < 3:
         fresh = osm_fetch(code)
+        OSM_FAILS["n"] = OSM_FAILS["n"] + 1 if fresh is None else 0
+        if OSM_FAILS["n"] == 3:
+            print("  osm: 3県続けて取得できないので、残りの県は保存済みの地図データを使う")
         if fresh and len(fresh) >= 0.8 * len(snap):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(fresh, f, ensure_ascii=False, separators=(",", ":"))
