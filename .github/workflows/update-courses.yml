@@ -21,13 +21,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: 国税庁の一覧からゴルフ場を作成
+      - name: 国税庁の一覧・地図データ・Wikipediaからゴルフ場を作成
         env:
           PREFS: ${{ github.event.inputs.prefs }}
         run: pip install -q pdfplumber && python -u tools/build_courses_nta.py
@@ -38,7 +38,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add courses
+          git add courses tools/osm_snapshot && git add tools/wikipedia_snapshot.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "変更なし"
           else
