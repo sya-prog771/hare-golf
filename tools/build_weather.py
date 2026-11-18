@@ -25,7 +25,7 @@ def fetch(part):
     last = None
     for attempt in range(4):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "hare-golf"}), timeout=60) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "hare-golf"}), timeout=25) as r:
                 js = json.load(r)
                 return js if isinstance(js, list) else [js]
         except urllib.error.HTTPError as e:
@@ -93,8 +93,10 @@ def main():
         out = {"generated": now, "start": start, "hFrom": H_FROM, "hTo": H_TO,
                "names": [c["name"] for c in courses], "lats": [c["lat"] for c in courses],
                "lons": [c["lon"] for c in courses], "rows": rows}
-        with open(f"weather/{pref}.json", "w", encoding="utf-8") as f:
+        tmp = f"weather/{pref}.json.tmp"  # 途中で止められても壊れたファイルを残さない
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp, f"weather/{pref}.json")
         print(f"{pref}: {len(rows)}")
     if len(failed) > 10:
         sys.exit(f"too many failures: {failed}")
