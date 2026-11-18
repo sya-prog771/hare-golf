@@ -157,6 +157,7 @@
     <div class="tools">
       <input type="search" id="q" placeholder="ゴルフ場名・市町村でしぼりこむ" aria-label="ゴルフ場名・市町村でしぼりこむ" enterkeyhint="search">
       <button type="button" class="btn-o" id="share" style="min-height:44px">共有</button>
+      <button type="button" class="btn-o" id="refresh" style="grid-column:1/-1;min-height:44px">↻ 最新の予報に更新</button>
       <div class="sub">
         <select id="sort" aria-label="並び順">
           <option value="rec">おすすめ順</option>
@@ -180,7 +181,7 @@
       <li>日付・時間・降水確率を変えると、その場で結果が変わります。</li>
       <li>日付の一覧で、晴れるゴルフ場が多い日（<b>最多</b>）がわかります。</li>
       <li>☆をタップするとお気に入りに登録できます。この端末にだけ保存されます。</li>
-      <li>天気予報は1日3回（5時・11時・18時ごろ）更新されます。</li>
+      <li>天気予報は1日3回（5時・11時・18時ごろ）更新されます。「最新の予報に更新」を押すと、表示中の都道府県だけ、その場で最新の予報を取り直します（30分に1回まで）。</li>
     </ul>
   </details>
 </main>
@@ -329,10 +330,15 @@
     const col=(k,s=1)=>keep.map(i=>H[k][i]==null?null:Math.round(H[k][i]*s));
     return {p:col("precipitation",10), pp:col("precipitation_probability"), c:col("weather_code"), t:col("temperature_2m"), w:col("wind_speed_10m")};
   }
-  async function fetchDirect(prefCode, courses){
+  // 30分以内にスマホから直接取った予報があれば使い回す（無料枠の節約）
+  function cachedDirect(prefCode, courses){
+    const c=store.get("gw-direct-"+prefCode);
+    return (c && Date.now()-c.t < 30*60e3 && c.n===courses.length && c.first===courses[0].name) ? c.data : null;
+  }
+  async function fetchDirect(prefCode, courses, fallback){
     const key="gw-direct-"+prefCode;
-    const cached=store.get(key);
-    if(cached && Date.now()-cached.t < 30*60e3 && cached.n===courses.length && cached.first===courses[0].name) return cached.data;
+    const cached=cachedDirect(prefCode, courses);
+    if(cached) return cached;
     const rows=new Array(courses.length).fill(null), CH=20, jobs=[];
     let failed=0, lastErr=null, done=0, start=null;
     for(let i=0;i<courses.length;i+=CH) jobs.push(i);
@@ -351,15 +357,19 @@
     }
     await Promise.all([0,1,2].map(async()=>{ while(jobs.length) await run(jobs.shift()); }));
     if(failed===courses.length) throw new Error("天気予報サーバー（Open-Meteo）に接続できませんでした（"+(lastErr&&lastErr.message||"通信エラー")+"）");
-    const data={generated:new Date().toISOString(), start, hFrom:H_FROM, hTo:H_TO, rows, source:"direct", stale:false};
+    // 一部取れなかったゴルフ場は、同じ日から始まる同梱の予報で補う
+    if(failed && fallback && fallback.start===start) rows.forEach((r,i)=>{ if(!r) rows[i]=fallback.rows[i]; });
+    const data={generated:new Date().toISOString(), start, hFrom:H_FROM, hTo:H_TO, rows, source:"direct", stale:false, failed};
     if(!failed) store.set(key,{t:Date.now(), n:courses.length, first:courses[0].name, data});
     return data;
   }
 
   async function fetchWeather(prefCode, courses){
     const pre = await fetchPrebuilt(prefCode, courses);
+    const mine = cachedDirect(prefCode, courses);   // さっき「最新の予報に更新」で取った分
+    if(mine && (!pre || new Date(mine.generated) > new Date(pre.generated))) return mine;
     if(pre && !pre.stale) return pre;
-    try{ return await fetchDirect(prefCode, courses); }
+    try{ return await fetchDirect(prefCode, courses, pre); }
     catch(e){ if(pre) return pre; throw e; } // 直接取れなければ、古くても同梱の予報を使う
   }
 
@@ -494,7 +504,7 @@
     let st=`<b>${esc(data.prefName)}</b>・${md(p.date)}（${WD[wday(p.date)]}）・${timeLabel(p.startMin)}〜${timeLabel(p.endMin)}：全${total}か所`;
     if(q || $("favOnly").checked) st+=`（しぼりこみ ${rows.length}か所）`;
     const g=new Date(W.generated);
-    if(!isNaN(g)) st+=`<br><small>予報の取得：${g.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}${W.source==="direct"?"（天気予報サーバーから直接）":""}</small>`;
+    if(!isNaN(g)) st+=`<br><small>予報の取得：${g.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}${W.source==="direct"?"（このスマホで最新に更新）":""}</small>`;
     if(W.stale) st+=`<br><span class="warn">※ 最新の予報を取得できなかったため、少し前の予報を表示しています。</span>`;
     const miss=data.courses.length-total;
     if(miss>0) st+=`<br><small>※ ${miss}か所はこの日の予報がないため一覧から外しています。</small>`;
@@ -614,6 +624,26 @@
     }
     settings.sort=v; saveSettings(); shown=PAGE; render();
   });
+  // 最新の予報に更新：表示中の県だけ、スマホから天気予報サーバーに直接問い合わせる
+  $("refresh").addEventListener("click", async ()=>{
+    if(!data) return;
+    const d=data, btn=$("refresh");
+    if(cachedDirect(d.prefCode, d.courses)){ toast("30分以内に更新済みです"); return; }
+    btn.disabled=true; $("go").disabled=true;
+    try{
+      const W=await fetchDirect(d.prefCode, d.courses, d.W.source==="prebuilt"?d.W:null);
+      if(data!==d) return; // 途中で県を変えた
+      data=Object.assign({}, d, {W});
+      shown=PAGE; render();
+      toast(W.failed ? `最新の予報に更新しました（${W.failed}か所は取得できず）` : "最新の予報に更新しました");
+    }catch(e){
+      if(data===d) render();
+      toast("更新できませんでした。少し時間をおいて試してください");
+    }finally{
+      btn.disabled=false; $("go").disabled=false;
+    }
+  });
+
   $("share").addEventListener("click", async ()=>{
     syncURL();
     const p=params();
