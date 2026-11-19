@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="晴れゴルフ">
+<meta name="apple-mobile-web-app-title" content="フェアウェイ予報">
 <meta name="robots" content="noindex, nofollow"><!-- 検索エンジンに載せない（アドレスを知っている人だけが使う） -->
 <meta name="theme-color" content="#1f6f4a">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>晴れゴルフ場さがし</title>
+<title>フェアウェイ予報</title>
 <style>
   :root{
     --bg:#f4f6f3; --card:#fff; --ink:#1d2621; --sub:#5d6b63; --line:#dfe5e0;
@@ -135,7 +135,7 @@
 <header>
   <div class="hd">
     <div>
-      <h1>⛳ 晴れゴルフ場さがし</h1>
+      <h1>⛳ フェアウェイ予報</h1>
       <p>都道府県・日付・時間を選ぶと、その時間に雨が降らなそうなゴルフ場を表示します</p>
     </div>
     <button type="button" class="invite-btn" id="invite">友人に教える</button>
@@ -704,7 +704,7 @@
   $("share").addEventListener("click", async ()=>{
     syncURL();
     const p=params();
-    const title=`晴れゴルフ：${data?data.prefName:""} ${md(p.date)}（${WD[wday(p.date)]}）${timeLabel(p.startMin)}〜${timeLabel(p.endMin)}`;
+    const title=`フェアウェイ予報：${data?data.prefName:""} ${md(p.date)}（${WD[wday(p.date)]}）${timeLabel(p.startMin)}〜${timeLabel(p.endMin)}`;
     try{
       if(navigator.share){ await navigator.share({title, text:title, url:location.href}); return; }
       await navigator.clipboard.writeText(title+"\n"+location.href);
@@ -749,7 +749,7 @@
   $("invSend").addEventListener("click", async ()=>{
     const text="雨が降らなそうなゴルフ場をさがせるアプリです";
     try{
-      if(navigator.share){ await navigator.share({title:"晴れゴルフ場さがし", text, url:appURL}); return; }
+      if(navigator.share){ await navigator.share({title:"フェアウェイ予報", text, url:appURL}); return; }
       await navigator.clipboard.writeText(text+"\n"+appURL);
       toast("この端末では送れないので、URLをコピーしました");
     }catch(e){ if(e && e.name!=="AbortError") toast("送れませんでした。コピーして送ってください"); }
