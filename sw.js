@@ -1,7 +1,7 @@
 // フェアウェイ予報 service worker
 // アプリ本体だけをキャッシュし、天気・ゴルフ場データは毎回ネットから取得する
-const CACHE = "hare-golf-v12";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./lib/qrcode.js"];
+const CACHE = "hare-golf-v13";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest?v=2", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./lib/qrcode.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
