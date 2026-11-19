@@ -41,7 +41,7 @@ jobs:
           mkdir -p /tmp/site
           cp index.html manifest.webmanifest sw.js icon-192.png icon-512.png apple-touch-icon.png /tmp/site/
           rm -f weather/*.tmp
-          cp -r courses weather /tmp/site/
+          cp -r courses weather lib /tmp/site/
           touch /tmp/site/.nojekyll
           cd /tmp/site
           git init -q -b gh-pages

@@ -33,6 +33,27 @@
   header{background:#1f6f4a;color:#fff;padding:calc(16px + env(safe-area-inset-top)) 16px 14px}
   header h1{margin:0;font-size:20px;letter-spacing:.02em}
   header p{margin:4px 0 0;font-size:12px;opacity:.85}
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;max-width:720px;margin:0 auto}
+  .invite-btn{flex:0 0 auto;font-size:13px;font-weight:700;padding:8px 12px;min-height:38px;border-radius:999px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.12);color:#fff;font-family:inherit;cursor:pointer}
+  .sheet{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+  .sheet-box{background:var(--card);color:var(--ink);width:100%;max-width:480px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+  @media (min-width:560px){ .sheet{align-items:center} .sheet-box{border-radius:18px} }
+  .sheet-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .sheet-head h2{margin:0;font-size:17px;color:var(--ink)}
+  .x{border:0;background:none;font-size:22px;line-height:1;color:var(--sub);padding:6px;cursor:pointer}
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--bg);border-radius:12px;padding:4px;margin:12px 0}
+  .seg button{min-height:40px;border:0;border-radius:9px;background:none;color:var(--sub);font-size:15px;font-weight:700;font-family:inherit;cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--green);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+  .qr{background:#fff;border-radius:12px;padding:10px;width:min(72vw,260px);margin:0 auto;aspect-ratio:1/1}
+  .qr svg{display:block;width:100%;height:100%}
+  .sheet p.note{font-size:13px;color:var(--sub);text-align:center;margin:10px 0 0;line-height:1.6}
+  .link{width:100%;font-size:15px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,monospace}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .row2 button{min-height:44px;font-size:15px;font-weight:700;border-radius:10px;font-family:inherit;cursor:pointer;border:1px solid var(--green)}
+  .row2 .pri{background:#1f6f4a;color:#fff;border-color:#1f6f4a}
+  .row2 .sec{background:var(--card);color:var(--green)}
+  .howto{font-size:13px;color:var(--sub);line-height:1.7;margin:14px 0 0;padding:10px 12px;background:var(--bg);border-radius:10px}
+  .howto b{color:var(--ink)}
   main{max-width:720px;margin:0 auto;padding:12px}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
   label{display:block;font-size:12px;color:var(--sub);margin:0 0 4px}
@@ -112,8 +133,13 @@
 </head>
 <body>
 <header>
-  <h1>⛳ 晴れゴルフ場さがし</h1>
-  <p>都道府県・日付・時間を選ぶと、その時間に雨が降らなそうなゴルフ場を表示します</p>
+  <div class="hd">
+    <div>
+      <h1>⛳ 晴れゴルフ場さがし</h1>
+      <p>都道府県・日付・時間を選ぶと、その時間に雨が降らなそうなゴルフ場を表示します</p>
+    </div>
+    <button type="button" class="invite-btn" id="invite">友人に教える</button>
+  </div>
 </header>
 <main>
   <form class="panel" id="form">
@@ -193,6 +219,36 @@
 </footer>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="invTitle">
+    <div class="sheet-head">
+      <h2 id="invTitle">友人にアプリを教える</h2>
+      <button type="button" class="x" id="invClose" aria-label="閉じる">✕</button>
+    </div>
+    <div class="seg" role="tablist">
+      <button type="button" role="tab" id="segQr" data-mode="qr">QRコード</button>
+      <button type="button" role="tab" id="segUrl" data-mode="url">URL</button>
+    </div>
+    <div id="invQr">
+      <div class="qr" id="qrBox" role="img" aria-label="アプリのQRコード"></div>
+      <p class="note">相手のスマホのカメラで読み取ってもらってください。</p>
+    </div>
+    <div id="invUrl" hidden>
+      <input class="link" id="invLink" readonly aria-label="アプリのURL">
+      <div class="row2">
+        <button type="button" class="sec" id="invCopy">コピー</button>
+        <button type="button" class="pri" id="invSend">LINEなどで送る</button>
+      </div>
+    </div>
+    <div class="howto">
+      <b>ホーム画面に追加するには</b><br>
+      iPhone：Safari で開く →（共有ボタン）→「ホーム画面に追加」<br>
+      Android：Chrome で開く → メニュー（︙）→「ホーム画面に追加」
+    </div>
+  </div>
+</div>
+
+<script src="lib/qrcode.js"></script>
 <script>
 (function(){
   "use strict";
@@ -654,6 +710,49 @@
       await navigator.clipboard.writeText(title+"\n"+location.href);
       toast("リンクをコピーしました");
     }catch(e){ if(e && e.name!=="AbortError") toast("共有できませんでした"); }
+  });
+
+  // ---- 友人に教える（QRコード / URL） ----
+  const appURL = location.origin + location.pathname.replace(/index\.html$/, "");
+  let qrDone=false;
+  function setInviteMode(m){
+    $("invQr").hidden = m!=="qr"; $("invUrl").hidden = m!=="url";
+    $("segQr").classList.toggle("on", m==="qr"); $("segUrl").classList.toggle("on", m==="url");
+    $("segQr").setAttribute("aria-selected", m==="qr"); $("segUrl").setAttribute("aria-selected", m==="url");
+    if(m==="qr" && !qrDone){
+      try{
+        const q=qrcode(0,"M"); q.addData(appURL); q.make();
+        $("qrBox").innerHTML=q.createSvgTag({cellSize:4, margin:2, scalable:true});
+        qrDone=true;
+      }catch(e){ $("qrBox").textContent="QRコードを作れませんでした。URLで送ってください。"; }
+    }
+    settings.invMode=m; saveSettings();
+  }
+  function openInvite(){
+    $("invLink").value=appURL;
+    $("sheet").hidden=false;
+    setInviteMode(settings.invMode==="url" ? "url" : "qr");
+    $("invClose").focus();
+  }
+  function closeInvite(){ $("sheet").hidden=true; $("invite").focus(); }
+  $("invite").addEventListener("click", openInvite);
+  $("invClose").addEventListener("click", closeInvite);
+  $("sheet").addEventListener("click", e=>{ if(e.target.id==="sheet") closeInvite(); });
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("sheet").hidden) closeInvite(); });
+  $("segQr").addEventListener("click", ()=>setInviteMode("qr"));
+  $("segUrl").addEventListener("click", ()=>setInviteMode("url"));
+  $("invLink").addEventListener("focus", e=>e.target.select());
+  $("invCopy").addEventListener("click", async ()=>{
+    try{ await navigator.clipboard.writeText(appURL); toast("URLをコピーしました"); }
+    catch(e){ $("invLink").focus(); $("invLink").select(); toast("URLを長押ししてコピーしてください"); }
+  });
+  $("invSend").addEventListener("click", async ()=>{
+    const text="雨が降らなそうなゴルフ場をさがせるアプリです";
+    try{
+      if(navigator.share){ await navigator.share({title:"晴れゴルフ場さがし", text, url:appURL}); return; }
+      await navigator.clipboard.writeText(text+"\n"+appURL);
+      toast("この端末では送れないので、URLをコピーしました");
+    }catch(e){ if(e && e.name!=="AbortError") toast("送れませんでした。コピーして送ってください"); }
   });
 
   load(); // 開いたらすぐ、いつもの都道府県で表示する
