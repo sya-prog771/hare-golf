@@ -147,7 +147,7 @@
     const html = `<h1 style="letter-spacing:.3em;font-size:15pt">診療録</h1>
       <table><tr><th>患者番号</th><td>${esc(p.pid)}</td><th>氏名</th><td>${esc(p.name)}（${esc(p.kana)}）</td></tr>
       <tr><th>生年月日</th><td>${esc(U.wareki(p.birth))}　${p.sex === "M" ? "男" : "女"}</td><th>期間</th><td>${esc(U.jdate(from))} 〜 ${esc(U.jdate(to))}</td></tr>
-      <tr><th>病名</th><td colspan="3">${probs.map(x => `${esc(x.name)}${x.suspected ? "（疑い）" : ""}［${esc(x.outcome)}］`).join("、")}</td></tr>
+      <tr><th>病名</th><td colspan="3">${probs.map(x => `${esc(ST.problemLabel(x))}［${esc(x.outcome)}］`).join("、")}</td></tr>
       <tr><th>アレルギー</th><td colspan="3">${(p.allergies || []).map(a => esc(a.substance) + (a.reaction ? `（${esc(a.reaction)}）` : "")).join("、") || "なし"}</td></tr></table>
       ${body || "<p>期間内の確定済み記載はありません。</p>"}
       <p class="note">${esc(s.clinicName)}　出力日時 ${esc(U.jdt(ST.nowIso()))}　出力者 ${esc(ST.S.user.name)}</p>`;

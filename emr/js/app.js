@@ -700,7 +700,7 @@
       h("div", { class: "pt-flags" },
         allergyBadges(p),
         p.infection ? badge(`感染症: ${p.infection}`, "warn") : null,
-        mainProblem.slice(0, 4).map(x => badge(x.name + (x.suspected ? "(疑)" : ""), x.main ? "key-dx" : "")),
+        mainProblem.slice(0, 4).map(x => badge(ST.problemLabel(x, true), x.main ? "key-dx" : "")),
         p.memo ? h("span", { class: "memo", title: "メモ" }, "📝 " + p.memo) : null),
       h("div", { class: "pt-actions" },
         today ? badge(`本日: ${M.encStatus[today.status]}`, "info") : (ST.can("reception") ? h("button", { class: "btn sm", onclick: () => receptionDialog(p) }, "受付する") : null),
@@ -898,7 +898,7 @@
     const soap = ["S", "O", "A", "P"].map(k => {
       const area = areas[k] = ta({ rows: k === "O" ? 4 : 3, value: c[k] || "", "aria-label": soapLabels[k], oninput: e => { c[k] = e.target.value; changed(); } });
       const chips = (M.phrases[k] || []).map(t => h("button", { type: "button", class: "chip", onclick: () => insertText(area, t) }, t));
-      if (k === "A") ST.problemsOf(p.id).filter(x => x.outcome === "継続").forEach(x => chips.unshift(h("button", { type: "button", class: "chip pb", onclick: () => insertText(area, x.name + "　") }, "＃" + x.name)));
+      if (k === "A") ST.problemsOf(p.id).filter(x => x.outcome === "継続").forEach(x => chips.unshift(h("button", { type: "button", class: "chip pb", onclick: () => insertText(area, (x.side || "") + x.name + "　") }, "＃" + (x.side || "") + x.name)));
       if (k === "S" && ST.encountersOf(p.id)[0] && ST.encountersOf(p.id)[0].complaint && ST.encountersOf(p.id)[0].date === ST.ymd()) {
         const cc = ST.encountersOf(p.id)[0].complaint;
         chips.unshift(h("button", { type: "button", class: "chip pb", onclick: () => insertText(area, cc + "。") }, "受付時主訴"));
@@ -1065,7 +1065,7 @@
     pane.appendChild(h("table", { class: "tbl" },
       h("thead", null, h("tr", null, ["病名", "ICD-10", "区分", "開始日", "転帰", "終了日", "コメント", ""].map(x => h("th", null, x)))),
       h("tbody", null, list.map(x => h("tr", { class: x.outcome !== "継続" ? "dim" : "" },
-        h("td", null, h("b", null, x.name), x.suspected ? badge("疑い", "warn") : null),
+        h("td", null, x.side ? h("span", { class: "side-tag" }, x.side) : null, h("b", null, x.name), x.suspected ? badge("疑い", "warn") : null),
         h("td", { class: "mono" }, x.icd || ""), h("td", null, x.main ? badge("主病名", "key-dx") : ""),
         h("td", null, U.jdate(x.start)), h("td", null, x.outcome), h("td", null, U.jdate(x.end)), h("td", { class: "small" }, x.comment || ""),
         h("td", null, canEdit ? [h("button", { class: "btn sm ghost", onclick: () => problemDialog(p, x) }, "編集"),
@@ -1110,7 +1110,22 @@
       else if (e.key === "Escape") { e.stopPropagation(); dd.hidden = true; }
     });
     name.addEventListener("blur", () => setTimeout(() => { dd.hidden = true; }, 150));
-    const prefix = t => () => { const v = name.value.replace(/^(左|右|両側)/, ""); name.value = t + v; showStatus(); name.focus(); };
+    // 部位（左・右・両側）は病名とは別に持つ。病名はマスターの表記のまま
+    let side = ST.SIDES.includes(x.side) ? x.side : "";
+    { // 以前の版で病名の頭に部位が付いて保存されたものは、分けて読み込む
+      const m = (name.value || "").match(/^(左|右|両側)(.+)$/);
+      if (!side && m && master.some(d => d.name === m[2])) { side = m[1]; name.value = m[2]; }
+    }
+    const preview = h("span", { class: "dx-preview" });
+    const sideBtns = ["", ...ST.SIDES].map(t => h("button", {
+      type: "button", class: "seg", "aria-pressed": String(t === side),
+      onclick: () => { side = t; sideBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === side))); updatePreview(); }, dataset: { v: t }
+    }, t || "なし"));
+    function updatePreview() {
+      const v = name.value.trim();
+      preview.textContent = v ? `表示：${side}${v}${susp.checked ? "（疑い）" : ""}` : "";
+    }
+    name.addEventListener("input", updatePreview);
     const susp = h("input", { type: "checkbox", checked: !!x.suspected });
     const main = h("input", { type: "checkbox", checked: !!x.main });
     const start = inp({ type: "date", value: x.start || ST.ymd() });
@@ -1118,17 +1133,18 @@
     const end = inp({ type: "date", value: x.end || "" });
     const comment = inp({ value: x.comment || "" });
     const info = ST.dxMasterInfo();
-    showStatus();
+    susp.addEventListener("change", updatePreview);
+    showStatus(); updatePreview();
     const r = await U.modal(x.id ? "病名の編集" : "病名の追加", h("div", null,
       h("label", { class: "field" }, h("span", null, "病名", h("em", { "aria-hidden": "true" }, " *")), h("div", { class: "drug-search" }, name, dd)),
-      h("div", { class: "chips" }, h("span", { class: "muted small" }, "部位："), ["左", "右", "両側"].map(t => h("button", { type: "button", class: "chip", onclick: prefix(t) }, t + "…"))),
       status,
+      h("div", { class: "side-row" }, h("span", { class: "side-label" }, "部位"), h("div", { class: "segs", role: "group", "aria-label": "部位" }, sideBtns), preview),
       h("div", { class: "grid2" }, field("ICD-10", icd), h("div", { class: "row", style: { alignSelf: "end" } }, h("label", { class: "check" }, susp, " 疑い"), h("label", { class: "check" }, main, " 主病名"))),
       h("div", { class: "grid3" }, field("開始日", start, { req: true }), field("転帰", outcome), field("終了日（転帰日）", end, { hint: "転帰が継続以外で空なら今日" })),
       field("コメント", comment),
       h("p", { class: "muted small" }, info.imported ? `病名マスター: 標準病名 ${info.imported.toLocaleString()}件＋組み込み` : `病名マスター: 組み込み ${info.builtin}件（管理画面で標準病名マスターを取り込むと約2万7千件から選べます）`)
     ), [{ label: "キャンセル", value: null }, {
-      label: "保存", cls: "primary", onClick: () => ST.saveProblem(p.id, { id: x.id, name: name.value, icd: icd.value.trim().toUpperCase(), suspected: susp.checked, main: main.checked, start: start.value, outcome: outcome.value, end: end.value, comment: comment.value.trim() })
+      label: "保存", cls: "primary", onClick: () => ST.saveProblem(p.id, { id: x.id, name: name.value, side, icd: icd.value.trim().toUpperCase(), suspected: susp.checked, main: main.checked, start: start.value, outcome: outcome.value, end: end.value, comment: comment.value.trim() })
     }]);
     if (r) { U.toast("病名を保存しました", "ok"); render(); }
   }
@@ -1246,7 +1262,7 @@
 
   async function docDialog(p, d0) {
     const isNew = !d0.id;
-    const probs = ST.problemsOf(p.id).filter(x => x.outcome === "継続").map(x => x.name + (x.suspected ? "（疑い）" : "")).join("\n");
+    const probs = ST.problemsOf(p.id).filter(x => x.outcome === "継続").map(x => ST.problemLabel(x)).join("\n");
     const lastNote = ST.notesOf(p.id).find(n => !n.deleted && n.versions.length);
     const lc = lastNote ? lastNote.versions[lastNote.versions.length - 1].content : null;
     const rx = ST.lastActiveRx(p.id);

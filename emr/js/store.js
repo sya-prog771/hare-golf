@@ -573,19 +573,25 @@
     return Array.from(S.col.problem.values()).filter(p => p.patientId === pid && !p.deleted)
       .sort((a, b) => (a.outcome === "継続" ? 0 : 1) - (b.outcome === "継続" ? 0 : 1) || (b.main ? 1 : 0) - (a.main ? 1 : 0) || b.start.localeCompare(a.start));
   }
+  const SIDES = ["左", "右", "両側"];
+  /** 表示用の病名（部位＋病名＋疑い）。病名そのものはマスターのまま保存し、部位は別に持つ */
+  function problemLabel(p, short) {
+    return `${p.side || ""}${p.name}${p.suspected ? (short ? "(疑)" : "（疑い）") : ""}`;
+  }
   async function saveProblem(pid, data) {
     need("problem.edit");
     if (!data.name || !data.start) throw new Error("病名と開始日は必須です");
     const old = data.id ? S.col.problem.get(data.id) : null;
     const p = old || { patientId: pid, createdAt: nowIso(), createdBy: S.user.id, log: [] };
-    const before = old ? { name: old.name, suspected: old.suspected, main: old.main, start: old.start, end: old.end, outcome: old.outcome } : null;
+    const before = old ? { name: old.name, side: old.side || "", suspected: old.suspected, main: old.main, start: old.start, end: old.end, outcome: old.outcome } : null;
+    const side = SIDES.includes(data.side) ? data.side : "";
     Object.assign(p, {
-      name: data.name.trim(), icd: data.icd || "", suspected: !!data.suspected, main: !!data.main,
+      name: data.name.trim(), side, icd: data.icd || "", suspected: !!data.suspected, main: !!data.main,
       start: data.start, end: data.outcome === "継続" ? "" : (data.end || ymd()), outcome: data.outcome || "継続", comment: data.comment || ""
     });
     p.log.push({ at: nowIso(), by: S.user.id, before });
     await save("problem", p);
-    const label = `${p.name}${p.suspected ? "（疑い）" : ""}`;
+    const label = problemLabel(p);
     await audit(old ? "病名変更" : "病名登録", { patientId: pid, target: p.id, detail: old ? `${label} → ${p.outcome}` : label });
     return p;
   }
@@ -774,7 +780,7 @@
     patients, patient, searchPatients, savePatient,
     encounters, encountersOn, encountersOf, receive, setEncStatus, ensureTodayEncounter,
     notesOf, noteContent, emptyContent, createNote, saveDraft, canSign, signNote, editSigned, discardDraft, deleteNote,
-    problemsOf, saveProblem, deleteProblem, diseaseMaster, dxMasterInfo, importDxMaster, clearDxMaster, loadDxMaster,
+    problemsOf, saveProblem, deleteProblem, problemLabel, SIDES, diseaseMaster, dxMasterInfo, importDxMaster, clearDxMaster, loadDxMaster,
     rxOf, lastActiveRx, itemQtyText, validateItems, checkRx, issueRx, cancelRx,
     labsOf, labRef, labValues, labFlag, eGFR, saveLab, deleteLab,
     docsOf, saveDoc, exportBackup, importBackup, lastBackup, save

@@ -161,6 +161,17 @@ function check(cond, msg) { if (cond) console.log("  ✓ " + msg); else { failur
   check(await page.locator(".modal .dx-status .ok-text").count() === 1, "マスターにある病名だと表示");
   await modalBtn("保存").click();
   await page.waitForSelector("td:has-text('急性腰痛症')");
+  await page.click("button:has-text('病名を追加')");
+  await page.fill(".modal input[role=combobox]", "へんけいせいひざ");
+  await page.waitForSelector(".modal .dropdown .opt");
+  await page.keyboard.press("Enter");
+  await page.click(".modal .seg:has-text('左')");
+  check(await page.inputValue(".modal input[role=combobox]") === "変形性膝関節症", "部位「左」を選んでも病名はマスターの表記のまま");
+  check(await page.locator(".modal .dx-status .ok-text").count() === 1, "部位を選んでも「マスターにあります」のまま");
+  check((await page.locator(".modal .dx-preview").textContent()) === "表示：左変形性膝関節症", "表示は「左変形性膝関節症」");
+  await modalBtn("保存").click();
+  await page.waitForSelector("tr:has-text('変形性膝関節症') .side-tag:has-text('左')");
+  check(await page.locator(".pt-head .badge:has-text('左変形性膝関節症')").count() === 1, "患者ヘッダーにも「左変形性膝関節症」");
   await page.goto(url + "#/admin");
   await page.setInputFiles("input[aria-label='病名マスターのファイル']", path.join(__dirname, "fixtures", "dx-sample-sjis.txt"));
   await page.click("button:has-text('読み取る')");

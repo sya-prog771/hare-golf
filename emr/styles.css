@@ -279,6 +279,14 @@ fieldset.plain legend { padding: 0; margin-bottom: 4px; }
 .dropdown .opt.free { color: var(--warn); }
 .dropdown .opt .badge { margin-left: 6px; }
 .dx-status { min-height: 1.5em; margin: 2px 0 8px; }
+.side-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.side-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.segs { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.seg { font: inherit; font-size: 13.5px; font-weight: 600; border: 0; border-left: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2); padding: 6px 14px; min-height: 36px; cursor: pointer; }
+.seg:first-child { border-left: 0; }
+.seg[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.dx-preview { font-size: 13px; color: var(--text-2); }
+.side-tag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 6px; margin-right: 4px; }
 .rx-items { list-style: none; margin: 0; padding: 0; }
 .rx-item { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; background: var(--surface-2); }
 .rx-item-name { display: flex; align-items: center; gap: 6px; }
