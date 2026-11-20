@@ -1075,24 +1075,60 @@
 
   async function problemDialog(p, x) {
     x = x || {};
-    const listId = "dl-dis-" + Date.now();
-    const name = inp({ value: x.name || "", list: listId, placeholder: "例: 高血圧症", autocomplete: "off" });
-    const icd = inp({ value: x.icd || "", class: "input mono" });
-    name.addEventListener("input", () => { const d = M.diseases.find(d => d.name === name.value.trim()); if (d) icd.value = d.icd; });
+    const master = ST.diseaseMaster();
+    const name = inp({ value: x.name || "", placeholder: "ひらがな・病名の一部・ICD-10 で検索（例: こうけつ、腰痛、J45）", autocomplete: "off", role: "combobox", "aria-autocomplete": "list" });
+    const icd = inp({ value: x.icd || "", class: "input mono", placeholder: "例: I10" });
+    const dd = h("div", { class: "dropdown", role: "listbox", hidden: true });
+    const status = h("p", { class: "small dx-status", "aria-live": "polite" });
+    let hits = [], cursor = 0;
+    const exact = () => master.find(d => d.name === name.value.trim());
+    function showStatus() {
+      const v = name.value.trim();
+      if (!v) { status.textContent = ""; return; }
+      const d = exact();
+      U.clear(status).append(d ? h("span", { class: "ok-text" }, `✓ 病名マスターにあります${d.src === "master" ? "（標準病名）" : ""}`)
+        : h("span", { class: "warn-text" }, "マスターにない病名です（自由入力）。レセプトでは「未コード化傷病名」になるため、できるだけ候補から選んでください。"));
+    }
+    function pick(d) {
+      name.value = d.name; icd.value = d.icd || "";
+      dd.hidden = true; showStatus(); name.focus();
+    }
+    function draw() {
+      U.clear(dd);
+      hits = window.EMRDxMaster.search(master, name.value, 30);
+      if (!hits.length) { dd.hidden = true; return; }
+      hits.forEach((d, i) => dd.appendChild(h("div", { class: "opt " + (i === cursor ? "on" : ""), role: "option", onmousedown: e => { e.preventDefault(); pick(d); } },
+        h("b", null, d.name), h("span", { class: "mono muted" }, "　" + (d.icd || "—")), d.src === "master" ? h("span", { class: "badge info" }, "標準") : null)));
+      dd.hidden = false;
+    }
+    name.addEventListener("input", () => { cursor = 0; draw(); showStatus(); });
+    name.addEventListener("keydown", e => {
+      if (dd.hidden || !hits.length) return;
+      if (e.key === "ArrowDown") { e.preventDefault(); cursor = (cursor + 1) % hits.length; draw(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); cursor = (cursor - 1 + hits.length) % hits.length; draw(); }
+      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); pick(hits[cursor]); }
+      else if (e.key === "Escape") { e.stopPropagation(); dd.hidden = true; }
+    });
+    name.addEventListener("blur", () => setTimeout(() => { dd.hidden = true; }, 150));
+    const prefix = t => () => { const v = name.value.replace(/^(左|右|両側)/, ""); name.value = t + v; showStatus(); name.focus(); };
     const susp = h("input", { type: "checkbox", checked: !!x.suspected });
     const main = h("input", { type: "checkbox", checked: !!x.main });
     const start = inp({ type: "date", value: x.start || ST.ymd() });
     const outcome = sel(["継続", "治癒", "中止", "軽快", "転医", "死亡"], x.outcome || "継続");
     const end = inp({ type: "date", value: x.end || "" });
     const comment = inp({ value: x.comment || "" });
+    const info = ST.dxMasterInfo();
+    showStatus();
     const r = await U.modal(x.id ? "病名の編集" : "病名の追加", h("div", null,
-      h("datalist", { id: listId }, M.diseases.map(d => h("option", { value: d.name }, d.icd))),
-      h("div", { class: "grid2" }, field("病名", name, { req: true }), field("ICD-10", icd)),
-      h("div", { class: "row" }, h("label", { class: "check" }, susp, " 疑い"), h("label", { class: "check" }, main, " 主病名")),
+      h("label", { class: "field" }, h("span", null, "病名", h("em", { "aria-hidden": "true" }, " *")), h("div", { class: "drug-search" }, name, dd)),
+      h("div", { class: "chips" }, h("span", { class: "muted small" }, "部位："), ["左", "右", "両側"].map(t => h("button", { type: "button", class: "chip", onclick: prefix(t) }, t + "…"))),
+      status,
+      h("div", { class: "grid2" }, field("ICD-10", icd), h("div", { class: "row", style: { alignSelf: "end" } }, h("label", { class: "check" }, susp, " 疑い"), h("label", { class: "check" }, main, " 主病名"))),
       h("div", { class: "grid3" }, field("開始日", start, { req: true }), field("転帰", outcome), field("終了日（転帰日）", end, { hint: "転帰が継続以外で空なら今日" })),
-      field("コメント", comment)
+      field("コメント", comment),
+      h("p", { class: "muted small" }, info.imported ? `病名マスター: 標準病名 ${info.imported.toLocaleString()}件＋組み込み` : `病名マスター: 組み込み ${info.builtin}件（管理画面で標準病名マスターを取り込むと約2万7千件から選べます）`)
     ), [{ label: "キャンセル", value: null }, {
-      label: "保存", cls: "primary", onClick: () => ST.saveProblem(p.id, { id: x.id, name: name.value, icd: icd.value.trim(), suspected: susp.checked, main: main.checked, start: start.value, outcome: outcome.value, end: end.value, comment: comment.value.trim() })
+      label: "保存", cls: "primary", onClick: () => ST.saveProblem(p.id, { id: x.id, name: name.value, icd: icd.value.trim().toUpperCase(), suspected: susp.checked, main: main.checked, start: start.value, outcome: outcome.value, end: end.value, comment: comment.value.trim() })
     }]);
     if (r) { U.toast("病名を保存しました", "ok"); render(); }
   }
@@ -1332,6 +1368,48 @@
     main.appendChild(h("section", { class: "card" }, h("div", { class: "page-head sub" }, h("h2", null, "利用者"), h("button", { class: "btn primary", onclick: () => userDialog(null) }, "＋ 利用者を追加")),
       h("table", { class: "tbl" }, h("thead", null, h("tr", null, ["ログインID", "氏名", "職種", "状態", ""].map(x => h("th", null, x)))), h("tbody", null, userRows)),
       h("p", { class: "muted small" }, "権限: 医師＝すべての診療記録・処方・病名・文書／看護師＝看護記録・バイタル・検査入力（診療録の確定と処方は不可）／医療事務＝受付・患者登録・会計（診療内容は閲覧不可）。")));
+
+    // 病名マスター
+    {
+      const info = ST.dxMasterInfo();
+      const file = h("input", { type: "file", accept: ".txt,.csv,.tsv,text/plain,text/csv", class: "input", "aria-label": "病名マスターのファイル" });
+      main.appendChild(h("section", { class: "card" }, h("h2", null, "病名マスター"),
+        h("p", null, info.imported
+          ? [`標準病名マスター ${info.imported.toLocaleString()}件を取り込み済み（${info.source}、${U.jdt(info.importedAt)}）。組み込みの ${info.builtin}件と合わせて検索できます。`]
+          : [`いまは組み込みの ${info.builtin}件（診療所でよく使う病名）から選べます。`, h("b", null, "標準病名マスターを取り込むと、約2万7千件の病名から選べるようになります。")]),
+        h("details", null, h("summary", null, "標準病名マスターの取り込み方"),
+          h("ol", { class: "steps-mini" },
+            h("li", null, "MEDIS-DC（医療情報システム開発センター、www.medis.or.jp）のサイトで「標準病名マスター（ICD10対応標準病名マスター）」をダウンロードする（無料。インターネットのつながるパソコンで）"),
+            h("li", null, "ダウンロードした ZIP ファイルを展開（右クリック →「すべて展開」）"),
+            h("li", null, "中にある病名の一覧のテキストファイル（いちばん大きいファイル）を下で選ぶ"),
+            h("li", null, "読み取り結果を確認して「取り込む」")),
+          h("p", { class: "muted small" }, "列の並びは自動で見分けます（病名・読み・ICD-10）。自分で作った「病名,よみ,ICD-10」の CSV も取り込めます。院内サーバー版では、取り込んだマスターはすべての端末で使えます。")),
+        h("div", { class: "row" }, file,
+          h("button", {
+            class: "btn primary", onclick: () => act(async () => {
+              const f = file.files[0];
+              if (!f) throw new Error("ファイルを選んでください");
+              const parsed = window.EMRDxMaster.parse(window.EMRDxMaster.decode(await f.arrayBuffer()));
+              const withIcd = parsed.list.filter(d => d.icd).length, withKana = parsed.list.filter(d => d.kana).length;
+              const ok = await U.modal("読み取り結果の確認", h("div", null,
+                h("p", null, h("b", null, `${parsed.list.length.toLocaleString()}件`), `の病名を読み取りました（ICD-10あり ${withIcd.toLocaleString()}件、読みあり ${withKana.toLocaleString()}件）。`),
+                h("div", { class: "table-scroll" }, h("table", { class: "tbl small" }, h("thead", null, h("tr", null, h("th", null, "病名"), h("th", null, "読み"), h("th", null, "ICD-10"))),
+                  h("tbody", null, parsed.list.slice(0, 8).map(d => h("tr", null, h("td", null, d.name), h("td", null, d.kana), h("td", { class: "mono" }, d.icd)))))),
+                h("p", { class: "muted small" }, "正しく読み取れていれば「取り込む」を押してください。病名と読みが入れ替わっているなど、おかしい場合はやめて、ファイルを確認してください。"),
+                info.imported ? h("p", { class: "small" }, "いま取り込んでいるマスターは、このファイルに置き換わります。") : null
+              ), [{ label: "やめる", value: false }, { label: "取り込む", cls: "primary", value: true }], { wide: true });
+              if (!ok) return;
+              await ST.importDxMaster(parsed.list, f.name);
+              U.toast(`病名マスター ${parsed.list.length.toLocaleString()}件を取り込みました`, "ok");
+              render();
+            })
+          }, "読み取る"),
+          info.imported ? h("button", {
+            class: "btn ghost", onclick: () => act(async () => {
+              if (await U.confirmDlg("病名マスターの削除", "取り込んだ標準病名マスターを削除して、組み込みの病名だけに戻しますか？（登録済みの患者の病名は消えません）", "削除する", true)) { await ST.clearDxMaster(); render(); }
+            })
+          }, "取り込んだマスターを削除") : null)));
+    }
 
     // 院内ネットワーク
     if (DB.mode === "server") {

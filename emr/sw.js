@@ -3,10 +3,10 @@
  * カルテのデータは扱わない（データはアプリ側で暗号化して IndexedDB / 院内サーバーに保存）。
  * 院内サーバーの API（api/）には一切さわらない。
  */
-const CACHE = "emr-shell-v1";
+const CACHE = "emr-shell-v2";
 const SHELL = [
   "./", "./index.html", "./styles.css", "./manifest.webmanifest", "./guide.html", "./guide.css",
-  "./js/jscrypto.js", "./js/crypto.js", "./js/db.js", "./js/master.js", "./js/store.js", "./js/ui.js",
+  "./js/jscrypto.js", "./js/diseases.js", "./js/dxmaster.js", "./js/crypto.js", "./js/db.js", "./js/master.js", "./js/store.js", "./js/ui.js",
   "./js/print.js", "./js/demo.js", "./js/charts.js", "./js/app.js", "./js/guide.js", "./vendor/qrcode.js",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-512.png", "./icons/apple-touch-icon.png", "./icons/favicon-32.png"
 ];

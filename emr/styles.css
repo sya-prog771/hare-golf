@@ -64,6 +64,7 @@ code, .mono { font-family: var(--mono); }
 .nowrap { white-space: nowrap; }
 .grow { flex: 1; }
 .ok-text { color: var(--ok); }
+.warn-text { color: var(--warn); }
 .danger-text { color: var(--danger); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -276,6 +277,8 @@ fieldset.plain legend { padding: 0; margin-bottom: 4px; }
 .dropdown .opt { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--line); }
 .dropdown .opt.on, .dropdown .opt:hover { background: var(--accent-soft); }
 .dropdown .opt.free { color: var(--warn); }
+.dropdown .opt .badge { margin-left: 6px; }
+.dx-status { min-height: 1.5em; margin: 2px 0 8px; }
 .rx-items { list-style: none; margin: 0; padding: 0; }
 .rx-item { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; background: var(--surface-2); }
 .rx-item-name { display: flex; align-items: center; gap: 6px; }

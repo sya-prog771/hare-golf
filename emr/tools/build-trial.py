@@ -5,7 +5,7 @@
 import os, sys
 here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 out = sys.argv[1] if len(sys.argv) > 1 else "emr-trial.html"
-js = ["jscrypto", "crypto", "db", "master", "store", "ui", "print", "demo", "charts", "app"]
+js = ["jscrypto", "crypto", "db", "diseases", "dxmaster", "master", "store", "ui", "print", "demo", "charts", "app"]
 parts = ['<title>電子カルテ お試し版</title>',
          '<meta name="claude:viewport-fit-sides" content="cover">',
          '<meta name="emr-trial" content="1">',

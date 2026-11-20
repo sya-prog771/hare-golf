@@ -151,6 +151,33 @@ function check(cond, msg) { if (cond) console.log("  ✓ " + msg); else { failur
   await page.waitForSelector("td:has-text('架空総合病院')");
   check(true, "文書を保存");
 
+  console.log("5b. 病名の検索と、病名マスターの取り込み");
+  await page.click(".tabs a:has-text('病名')");
+  await page.click("button:has-text('病名を追加')");
+  await page.fill(".modal input[role=combobox]", "ぎっくり");
+  await page.waitForSelector(".modal .dropdown .opt");
+  await page.keyboard.press("Enter");
+  check(await page.inputValue(".modal input[role=combobox]") === "急性腰痛症" && await page.locator(".modal .field", { hasText: "ICD-10" }).locator("input").inputValue() === "M54.5", "「ぎっくり」で検索 → 急性腰痛症（M54.5）を選べる");
+  check(await page.locator(".modal .dx-status .ok-text").count() === 1, "マスターにある病名だと表示");
+  await modalBtn("保存").click();
+  await page.waitForSelector("td:has-text('急性腰痛症')");
+  await page.goto(url + "#/admin");
+  await page.setInputFiles("input[aria-label='病名マスターのファイル']", path.join(__dirname, "fixtures", "dx-sample-sjis.txt"));
+  await page.click("button:has-text('読み取る')");
+  await page.waitForSelector(".modal:has-text('8件')");
+  check(true, "標準病名マスター形式のファイル（Shift_JIS）を読み取り、確認画面に8件");
+  await modalBtn("取り込む").click();
+  await page.waitForSelector(".card:has-text('取り込み済み')");
+  await page.goto(url + "#/patients?q=ヤマダ");
+  await page.click("tr:has-text('山田 太郎')");
+  await page.click(".tabs a:has-text('病名')");
+  await page.click("button:has-text('病名を追加')");
+  await page.fill(".modal input[role=combobox]", "こうちゅう");
+  await page.waitForSelector(".modal .dropdown .opt:has-text('鉤虫症')");
+  check(await page.locator(".modal .dropdown .opt:has-text('鉤虫症') .badge:has-text('標準')").count() === 1, "取り込んだマスターだけにある病名も検索できる");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+
   console.log("6. 監査ログ・改ざんチェック・バックアップ");
   await page.goto(url + "#/audit");
   await page.click("button:has-text('改ざんチェック')");

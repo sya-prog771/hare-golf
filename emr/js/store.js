@@ -8,6 +8,7 @@
     dek: null, user: null, col: {}, auditSeq: 0, auditHash: "", corrupted: 0,
     q: Promise.resolve(), listeners: new Set()
   };
+  let dxImported = null, dxMerged = null; // 病名マスター（下の「病名マスター」で使う）
   function resetCols() { for (const t of TYPES) S.col[t] = new Map(); }
   resetCols();
 
@@ -72,6 +73,8 @@
           types.add(it.value.type);
           if (it.value.type === "audit" && obj.seq > S.auditSeq) { S.auditSeq = obj.seq; S.auditHash = obj.hash; }
         } catch (e) { S.corrupted++; }
+      } else if (it.store === "meta" && it.value.key === "diseaseMaster") {
+        dxImported = it.value.rows && it.value.rows.length ? it.value : null; dxMerged = null;
       } else if (it.store === "meta" && it.value.key === "auditTail" && it.value.seq > S.auditSeq) {
         S.auditSeq = it.value.seq; S.auditHash = it.value.hash;
       }
@@ -248,6 +251,7 @@
     const staff = S.col.staff.get(u.id);
     if (!staff || !staff.active) { clearSession(); throw new Error("このIDは利用停止中です。管理者に連絡してください"); }
     S.user = staff;
+    await loadDxMaster();
     await audit("ログイン");
     DB.connect(staff.name);
     return staff;
@@ -533,6 +537,37 @@
     await audit("カルテ削除", { patientId: n.patientId, target: n.id, detail: reason });
   }
 
+  // ---------- 病名マスター ----------
+  // 取り込んだ標準病名マスター（公開されている参照データなので暗号化しない）＋組み込みの病名
+  async function loadDxMaster() {
+    try { dxImported = (await DB.get("meta", "diseaseMaster")) || null; } catch (e) { dxImported = null; }
+    if (dxImported && !(dxImported.rows && dxImported.rows.length)) dxImported = null;
+    dxMerged = null;
+  }
+  function diseaseMaster() {
+    if (dxMerged) return dxMerged;
+    const imported = dxImported ? dxImported.rows.map(r => ({ name: r[0], kana: r[1], icd: r[2], src: "master" })) : [];
+    const names = new Set(imported.map(d => d.name));
+    dxMerged = imported.concat(M.diseases.filter(d => !names.has(d.name)));
+    return dxMerged;
+  }
+  function dxMasterInfo() {
+    return { builtin: M.diseases.length, imported: dxImported ? dxImported.rows.length : 0, source: dxImported ? dxImported.source : "", importedAt: dxImported ? dxImported.importedAt : "" };
+  }
+  async function importDxMaster(list, source) {
+    need("admin");
+    dxImported = { key: "diseaseMaster", source: String(source || "").slice(0, 200), importedAt: nowIso(), rows: list.map(d => [d.name, d.kana || "", d.icd || ""]) };
+    await DB.put("meta", dxImported);
+    dxMerged = null;
+    await audit("病名マスター取り込み", { detail: `${source}（${list.length}件）` });
+  }
+  async function clearDxMaster() {
+    need("admin");
+    await DB.put("meta", { key: "diseaseMaster", rows: [], source: "", importedAt: "" });
+    dxImported = null; dxMerged = null;
+    await audit("病名マスター削除");
+  }
+
   // ---------- 病名 ----------
   function problemsOf(pid) {
     return Array.from(S.col.problem.values()).filter(p => p.patientId === pid && !p.deleted)
@@ -739,7 +774,7 @@
     patients, patient, searchPatients, savePatient,
     encounters, encountersOn, encountersOf, receive, setEncStatus, ensureTodayEncounter,
     notesOf, noteContent, emptyContent, createNote, saveDraft, canSign, signNote, editSigned, discardDraft, deleteNote,
-    problemsOf, saveProblem, deleteProblem,
+    problemsOf, saveProblem, deleteProblem, diseaseMaster, dxMasterInfo, importDxMaster, clearDxMaster, loadDxMaster,
     rxOf, lastActiveRx, itemQtyText, validateItems, checkRx, issueRx, cancelRx,
     labsOf, labRef, labValues, labFlag, eGFR, saveLab, deleteLab,
     docsOf, saveDoc, exportBackup, importBackup, lastBackup, save
