@@ -60,6 +60,8 @@
     for (const d of ICONS[name]) { const p = document.createElementNS(SVGNS, "path"); p.setAttribute("d", d); svg.appendChild(p); }
     return svg;
   }
+  // お試し版（<meta name="emr-trial">）: 実データを入れないよう表示し、インストール案内などは出さない
+  const TRIAL = !!document.querySelector('meta[name="emr-trial"]');
   const isStandalone = () => (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
   const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
   const isPhoneLike = () => (window.matchMedia && matchMedia("(max-width: 900px)").matches) && (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
@@ -68,7 +70,7 @@
 
   /** ホーム画面に追加（アプリとしてインストール）の案内 */
   function installBanner(force, compact) {
-    if (!isPhoneLike() || isStandalone()) return null;
+    if (TRIAL || !isPhoneLike() || isStandalone()) return null;
     if (!window.isSecureContext || !("serviceWorker" in navigator)) return null; // 院内LAN(http)では追加できない
     let dismissed = false;
     try { dismissed = localStorage.getItem("emr-install-dismissed") === "1"; } catch (e) { /* noop */ }
@@ -91,6 +93,7 @@
   }
 
   function registerSW() {
+    if (TRIAL) return;
     if (!("serviceWorker" in navigator) || !window.isSecureContext || !/^https?:$/.test(location.protocol)) return;
     navigator.serviceWorker.register("sw.js").catch(e => console.warn("オフライン用の保存に失敗", e));
   }
@@ -108,6 +111,7 @@
     }
     DB.onStatus(updateConn);
     registerSW();
+    if (TRIAL) document.body.insertBefore(h("div", { class: "trial-bar", role: "note" }, h("b", null, "お試し版"), "　架空のデータで操作を試すためのページです。実在の患者さんの情報は入力しないでください。印刷・バックアップの書き出しは、このページでは動きません。"), root);
     // ローカル版は、同時に2つのタブで開くとデータが食い違うので、1タブに限定する
     if (DB.mode === "local" && navigator.locks && navigator.locks.request) {
       let got = false;
