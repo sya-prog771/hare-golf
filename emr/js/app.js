@@ -1289,6 +1289,22 @@
             renderLogin();
           })
         }, "バックアップから復元"))));
+
+    // デモで試したあと、本番用に最初からやり直す（この端末だけで使う版のみ）
+    if (DB.mode === "local") main.appendChild(h("section", { class: "card" }, h("h2", null, "最初からやり直す"),
+      h("p", null, "デモデータで試し終わって本番の運用を始めるときなどに、この端末の電子カルテのデータ（患者・カルテ・利用者・監査ログ）をすべて消して、初期設定の画面に戻します。"),
+      h("p", { class: "danger-text small" }, "消したデータは元に戻せません。必要なら先にバックアップを書き出してください。"),
+      h("button", {
+        class: "btn danger", onclick: () => act(async () => {
+          const ok = await U.askText("すべてのデータを消去", "続けるには「消去」と入力してください", { required: true, danger: true, okLabel: "すべて消去する" });
+          if (ok !== "消去") { if (ok) U.toast("「消去」と入力されなかったため、中止しました", "error"); return; }
+          await flushAll();
+          ST.clearSession();
+          await DB.replaceAll({ users: [], records: [], meta: [] });
+          location.hash = "";
+          location.reload();
+        })
+      }, "すべてのデータを消して初期設定からやり直す")));
   }
 
   async function userDialog(st) {

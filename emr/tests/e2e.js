@@ -247,6 +247,14 @@ function check(cond, msg) { if (cond) console.log("  ✓ " + msg); else { failur
   await page.waitForSelector(".verify .notice");
   check(await page.locator(".verify li", { hasText: "連番の欠落" }).count() === 1, "監査ログの欠落を検出");
 
+  console.log("9. 最初からやり直す");
+  await page.goto(url + "#/admin");
+  await page.click("button:has-text('すべてのデータを消して')");
+  await page.fill(".modal input", "消去");
+  await modalBtn("すべて消去する").click();
+  await page.waitForSelector("h1:has-text('初期設定')");
+  check(await page.evaluate(() => new Promise(r => { const q = indexedDB.open("emr-local"); q.onsuccess = () => { const g = q.result.transaction("records").objectStore("records").count(); g.onsuccess = () => r(g.result); }; })) === 0, "全データを消して初期設定画面に戻る");
+
   // 院内サーバーかどうかの問い合わせ（api/info）に、ふつうのWebサーバーが 404 を返すのは正常
   const realErrors = errors.filter(e => !/favicon/.test(e) && !/status of 404/.test(e));
   check(realErrors.length === 0, "JavaScript エラーなし" + (realErrors.length ? ": " + realErrors.join(" | ") : ""));
