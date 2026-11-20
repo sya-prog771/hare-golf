@@ -1,0 +1,4 @@
+# 本体は Python 標準ライブラリだけで動きます。以下は資料の読み込み・Word出力用（任意）
+pypdf
+python-docx
+python-pptx

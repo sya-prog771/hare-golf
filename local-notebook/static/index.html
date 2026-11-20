@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ノートブックAI</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">📓 ノートブックAI <span class="badge">ローカル</span></div>
+  <div class="nb-picker">
+    <select id="nbSelect" aria-label="ノートブック"></select>
+    <button id="nbNew" class="btn" title="新しいノートブック">＋ 新規</button>
+    <button id="nbRename" class="btn icon" title="名前を変更">✎</button>
+    <button id="nbDelete" class="btn icon" title="削除">🗑</button>
+  </div>
+  <button id="openSettings" class="btn" title="設定"><span id="llmDot" class="dot"></span> ⚙ 設定</button>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-pane="sources" class="active">資料</button>
+  <button data-pane="chat">チャット</button>
+  <button data-pane="studio">文書作成</button>
+</nav>
+
+<main class="layout">
+  <!-- 左: 資料 -->
+  <section class="pane active" id="pane-sources">
+    <div class="pane-head">
+      <h2>資料</h2>
+      <button id="addSource" class="btn primary">＋ 資料を追加</button>
+    </div>
+    <label class="check-all"><input type="checkbox" id="checkAll" checked> すべて選択</label>
+    <ul id="sourceList" class="source-list"></ul>
+    <div id="dropHint" class="drop-hint">ここにファイルをドラッグ＆ドロップ<br><small>PDF・Word・PowerPoint・テキスト・Markdown</small></div>
+  </section>
+
+  <!-- 中央: チャット -->
+  <section class="pane" id="pane-chat">
+    <div class="pane-head">
+      <h2>チャット</h2>
+      <button id="clearChat" class="btn ghost">履歴を消す</button>
+    </div>
+    <div id="chatLog" class="chat-log"></div>
+    <form id="chatForm" class="chat-form">
+      <textarea id="chatInput" rows="2" placeholder="資料について質問する…（Enterで送信 / Shift+Enterで改行）"></textarea>
+      <button class="btn primary" id="chatSend">送信</button>
+    </form>
+  </section>
+
+  <!-- 右: 文書作成 -->
+  <section class="pane" id="pane-studio">
+    <div class="pane-head"><h2>文書作成</h2></div>
+    <p class="muted small">選択中の資料をもとに文書を作ります</p>
+    <div id="templateGrid" class="template-grid"></div>
+    <details class="extra">
+      <summary>追加の指示（任意）</summary>
+      <textarea id="extraInput" rows="3" placeholder="例: 会議名は「11月定例」。A4 1枚に収まる長さで。担当者は敬称略。"></textarea>
+      <button id="customGen" class="btn">この指示だけで自由に作成</button>
+    </details>
+    <h3 class="notes-head">保存したメモ</h3>
+    <ul id="noteList" class="note-list"></ul>
+    <button id="newNote" class="btn ghost small">＋ 手書きメモ</button>
+  </section>
+</main>
+
+<!-- 文書ビューア -->
+<div id="docPanel" class="modal" hidden>
+  <div class="modal-box wide">
+    <div class="modal-head">
+      <input id="docTitle" class="doc-title" aria-label="タイトル">
+      <span id="docStatus" class="muted small"></span>
+      <button class="btn icon" data-close>✕</button>
+    </div>
+    <div id="docBody" class="doc-body md"></div>
+    <textarea id="docEditor" class="doc-editor" hidden></textarea>
+    <div class="modal-foot">
+      <button id="docStop" class="btn" hidden>■ 停止</button>
+      <button id="docEdit" class="btn">✎ 編集</button>
+      <button id="docSave" class="btn primary">メモに保存</button>
+      <button id="docCopy" class="btn">コピー</button>
+      <button id="docMd" class="btn">.md</button>
+      <button id="docWord" class="btn">Word</button>
+      <button id="docToSource" class="btn ghost" title="この文書を資料として追加し、チャットの検索対象にする">資料に追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 資料を追加 -->
+<div id="addPanel" class="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><h3>資料を追加</h3><button class="btn icon" data-close>✕</button></div>
+    <div class="add-body">
+      <label class="file-drop">
+        <input type="file" id="fileInput" multiple accept=".pdf,.docx,.pptx,.txt,.md,.markdown,.csv,.tsv,.json,.html,.htm,.vtt,.srt,.log">
+        📄 ファイルを選ぶ<br><small>PDF・Word・PowerPoint・テキスト・Markdown・字幕(vtt/srt)</small>
+      </label>
+      <div class="or">または URL</div>
+      <div class="row"><input id="urlInput" placeholder="https://..."><button id="urlAdd" class="btn">追加</button></div>
+      <div class="or">または テキストを貼り付け（会議の文字起こし・メモなど）</div>
+      <input id="pasteTitle" placeholder="タイトル（省略可）">
+      <textarea id="pasteText" rows="8" placeholder="ここに貼り付け"></textarea>
+      <button id="pasteAdd" class="btn primary">テキストを追加</button>
+      <div id="addStatus" class="muted small"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 資料の中身 -->
+<div id="sourcePanel" class="modal" hidden>
+  <div class="modal-box wide">
+    <div class="modal-head"><h3 id="sourceTitle"></h3><button class="btn icon" data-close>✕</button></div>
+    <div id="sourceBody" class="source-body"></div>
+  </div>
+</div>
+
+<!-- 設定 -->
+<div id="settingsPanel" class="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><h3>設定</h3><button class="btn icon" data-close>✕</button></div>
+    <div class="settings">
+      <label>LLMの種類
+        <select id="cfgBackend">
+          <option value="ollama">Ollama（おすすめ）</option>
+          <option value="openai">OpenAI互換（LM Studio・llama.cpp など）</option>
+        </select>
+      </label>
+      <label>サーバーのURL <input id="cfgUrl"></label>
+      <label>文章を書くモデル
+        <input id="cfgModel" list="modelList" placeholder="例: qwen3:8b"></label>
+      <label>検索用の埋め込みモデル（任意）
+        <input id="cfgEmbed" list="modelList" placeholder="例: bge-m3（空ならキーワード検索）"></label>
+      <datalist id="modelList"></datalist>
+      <div class="row2">
+        <label>文脈の長さ（トークン） <input id="cfgCtx" type="number" min="2048" step="1024"></label>
+        <label>温度（0=堅実〜1=自由） <input id="cfgTemp" type="number" min="0" max="2" step="0.1"></label>
+      </div>
+      <div id="cfgStatus" class="muted small"></div>
+      <div class="modal-foot">
+        <button id="cfgTest" class="btn">接続を確認</button>
+        <button id="cfgReembed" class="btn ghost" title="埋め込みモデルを後から設定・変更したとき">資料の検索インデックスを作り直す</button>
+        <button id="cfgSave" class="btn primary">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="popover" class="popover" hidden></div>
+<div id="toast" class="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>
