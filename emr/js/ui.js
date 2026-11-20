@@ -60,7 +60,7 @@
           } else close(b.value);
         }
       }, b.label));
-      const dlg = h("div", { class: "modal " + (opts.wide ? "wide" : ""), role: "dialog", "aria-modal": "true", "aria-label": title },
+      const dlg = h("div", { class: "modal " + (opts.wide ? "wide " : "") + (opts.cls || ""), role: "dialog", "aria-modal": "true", "aria-label": title },
         h("div", { class: "modal-head" }, h("h2", null, title), h("button", { class: "icon-btn", type: "button", "aria-label": "閉じる", onclick: () => close(null) }, "×")),
         h("div", { class: "modal-body" }, body),
         h("div", { class: "modal-foot" }, btns));

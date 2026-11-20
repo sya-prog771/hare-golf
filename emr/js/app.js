@@ -46,6 +46,55 @@
   }
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 
+  // ---------- スマホ向け ----------
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const ICONS = {
+    reception: ["M8 4h8v3H8z", "M6 5H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1", "M8 12h8", "M8 16h5"],
+    search: ["M11 4a7 7 0 1 1 0 14a7 7 0 1 1 0-14z", "M16.5 16.5L21 21"],
+    add: ["M9 4a4 4 0 1 1 0 8a4 4 0 1 1 0-8z", "M2 21c0-4 3-6 7-6s7 2 7 6", "M19 8v6", "M16 11h6"],
+    menu: ["M4 7h16", "M4 12h16", "M4 17h16"]
+  };
+  function icon(name) {
+    const svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); svg.setAttribute("class", "ico");
+    for (const d of ICONS[name]) { const p = document.createElementNS(SVGNS, "path"); p.setAttribute("d", d); svg.appendChild(p); }
+    return svg;
+  }
+  const isStandalone = () => (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  const isPhoneLike = () => (window.matchMedia && matchMedia("(max-width: 900px)").matches) && (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
+  let installPrompt = null;
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; document.querySelectorAll(".install-banner").forEach(b => b.replaceWith(installBanner(true) || "")); });
+
+  /** ホーム画面に追加（アプリとしてインストール）の案内 */
+  function installBanner(force, compact) {
+    if (!isPhoneLike() || isStandalone()) return null;
+    if (!window.isSecureContext || !("serviceWorker" in navigator)) return null; // 院内LAN(http)では追加できない
+    let dismissed = false;
+    try { dismissed = localStorage.getItem("emr-install-dismissed") === "1"; } catch (e) { /* noop */ }
+    if (dismissed && !force) return null;
+    const close = h("button", { type: "button", class: "icon-btn", "aria-label": "閉じる", onclick: e => { try { localStorage.setItem("emr-install-dismissed", "1"); } catch (x) { /* noop */ } e.target.closest(".install-banner").remove(); } }, "×");
+    let body;
+    if (isIOS()) {
+      body = [h("p", null, h("b", null, "ホーム画面に追加すると、アプリとして電波がなくても使えます。")),
+        h("ol", null, h("li", null, "画面下（iPad は上）の ", h("b", null, "共有ボタン（□に↑）"), " を押す"), h("li", null, "「", h("b", null, "ホーム画面に追加"), "」→「追加」"), h("li", null, "ホーム画面にできた ", h("b", null, "電子カルテ"), " のアイコンから開く")),
+        h("p", { class: "small" }, "⚠ iPhone・iPad では、Safari のまま入力したデータは、ホーム画面のアプリからは見えません。", h("b", null, "先に追加してから、アイコンで開いて初期設定"), "してください。")];
+    } else if (installPrompt) {
+      body = [h("p", null, h("b", null, "アプリとしてインストールすると、電波がなくても使えます。")),
+        h("button", { type: "button", class: "btn primary", onclick: async () => { installPrompt.prompt(); try { await installPrompt.userChoice; } catch (e) { /* noop */ } installPrompt = null; document.querySelectorAll(".install-banner").forEach(b => b.remove()); } }, "アプリとしてインストール")];
+    } else {
+      body = [h("p", null, h("b", null, "ホーム画面に追加すると、アプリとして電波がなくても使えます。")),
+        h("p", null, "ブラウザ右上の ", h("b", null, "︙"), " →「", h("b", null, "アプリをインストール"), "」または「", h("b", null, "ホーム画面に追加"), "」")];
+    }
+    if (compact) body = [h("details", null, h("summary", null, h("b", null, "ホーム画面に追加すると、アプリとして電波がなくても使えます")), body.slice(1))];
+    return h("div", { class: "install-banner" + (compact ? " compact" : ""), role: "note" }, h("img", { src: "icons/icon-192.png", alt: "", width: compact ? 28 : 44, height: compact ? 28 : 44 }), h("div", { class: "ib-body" }, body), close);
+  }
+
+  function registerSW() {
+    if (!("serviceWorker" in navigator) || !window.isSecureContext || !/^https?:$/.test(location.protocol)) return;
+    navigator.serviceWorker.register("sw.js").catch(e => console.warn("オフライン用の保存に失敗", e));
+  }
+
   // ---------- 起動 ----------
   const DB = window.EMRDB;
   async function boot() {
@@ -58,6 +107,7 @@
       return;
     }
     DB.onStatus(updateConn);
+    registerSW();
     // ローカル版は、同時に2つのタブで開くとデータが食い違うので、1タブに限定する
     if (DB.mode === "local" && navigator.locks && navigator.locks.request) {
       let got = false;
@@ -164,8 +214,10 @@
       h("p", { class: "notice" }, "パスワードを忘れると、ほかの管理者がいない限りデータを復元できません。必ず控えを安全な場所に保管してください。"),
       h("label", { class: "check" }, f.demo, " 操作を試すためのデモデータ（架空の患者4名）を入れる"),
       err, btn);
+    const ib = installBanner(true);
+    if (ib) root.appendChild(ib);
     root.appendChild(form);
-    f.clinic.focus();
+    if (!isPhoneLike()) f.clinic.focus();
   }
 
   async function migrateDialog() {
@@ -213,8 +265,10 @@
       h("p", { class: "muted small login-mode" }, DB.mode === "server"
         ? ["院内サーバーに接続しています（", location.host, "）　", h("a", { href: "guide.html", target: "_blank", rel: "noopener" }, "接続ガイド")]
         : "この端末だけで使う版（データはこのブラウザ内に保存）"));
+    const ib = installBanner();
+    if (ib) root.appendChild(ib);
     root.appendChild(form);
-    id.focus();
+    if (!isPhoneLike()) id.focus();
   }
 
   async function afterLogin() {
@@ -261,13 +315,16 @@
   function startTimers() {
     stopTimers();
     lastActivity = Date.now();
-    idleTimer = setInterval(() => {
-      const min = Number(ST.settings().autoLockMin) || 0;
-      if (min > 0 && ST.S.user && Date.now() - lastActivity > min * 60000) {
-        doLogout("一定時間操作がなかったため自動ロック", `${min}分間操作がなかったため、自動的にロックしました。`, true);
-      }
-    }, 10000);
+    idleTimer = setInterval(checkIdle, 10000);
   }
+  function checkIdle() {
+    const min = ST.S.user ? Number(ST.settings().autoLockMin) || 0 : 0;
+    if (min > 0 && Date.now() - lastActivity > min * 60000) {
+      doLogout("一定時間操作がなかったため自動ロック", `${min}分間操作がなかったため、自動的にロックしました。`, true);
+    }
+  }
+  // スマホはアプリを裏に回すとタイマーが止まるので、戻ってきた瞬間に確認する（画面にカルテが見えないうちにロック）
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkIdle(); });
   function stopTimers() { clearInterval(idleTimer); clearInterval(receptionTimer); idleTimer = receptionTimer = null; }
   ["pointerdown", "keydown", "wheel", "touchstart"].forEach(ev => window.addEventListener(ev, () => { lastActivity = Date.now(); }, { passive: true, capture: true }));
   window.addEventListener("beforeunload", e => {
@@ -298,9 +355,29 @@
         h("button", { class: "btn ghost sm", onclick: () => passwordDialog(false) }, "パスワード"),
         h("button", { class: "btn ghost sm", title: "画面をロックして離席（Ctrl+L）", onclick: () => doLogout("ロック", "ロックしました。再開するにはログインしてください。", true) }, "ロック"),
         h("button", { class: "btn ghost sm", onclick: () => doLogout("ログアウト") }, "ログアウト")));
+    header.appendChild(h("button", { type: "button", class: "menu-btn", "aria-label": "メニュー", onclick: () => menuSheet() }, icon("menu")));
     const main = h("main", { class: "main", id: "main", tabindex: "-1" });
-    root.append(header, h("div", { class: "body" }, nav, main));
-    shell = { main, nav, header, quick };
+    const tabs = [["#/reception", "受付", "reception", "reception"], ["#/patients", "患者", "search", null], ["#/new", "新規登録", "add", "patient.edit"]]
+      .filter(x => !x[3] || ST.can(x[3]));
+    const tabbar = h("nav", { class: "tabbar", "aria-label": "メインメニュー（スマホ）" },
+      tabs.map(([href, label, ic]) => h("a", { href }, icon(ic), h("span", null, label))),
+      h("button", { type: "button", onclick: () => menuSheet() }, icon("menu"), h("span", null, "メニュー")));
+    root.append(header, h("div", { class: "body" }, nav, main), tabbar);
+    shell = { main, nav, header, quick, tabbar };
+  }
+
+  /** スマホのメニュー（利用者・接続状態・管理・ロックなど） */
+  function menuSheet() {
+    const u = ST.S.user;
+    const item = (label, fn, cls) => h("button", { type: "button", class: "sheet-item " + (cls || ""), onclick: () => { document.querySelector(".modal-back .icon-btn").click(); setTimeout(fn, 0); } }, label);
+    U.modal("メニュー", h("div", { class: "sheet-list" },
+      h("div", { class: "sheet-user" }, h("b", null, u.name), h("span", { class: "muted" }, `${M.roles[u.role]}${u.admin ? "・管理者" : ""}`), connBadge(), h("span", { class: "muted small" }, U.jdateW(ST.ymd()))),
+      ST.can("admin") ? item("管理（利用者・設定・バックアップ）", () => go("#/admin")) : null,
+      ST.can("admin") ? item("監査ログ", () => go("#/audit")) : null,
+      item("パスワード変更", () => passwordDialog(false)),
+      item("ロック（離席するとき）", () => doLogout("ロック", "ロックしました。再開するにはログインしてください。", true), "strong"),
+      item("ログアウト", () => doLogout("ログアウト"))
+    ), [], { cls: "sheet" });
   }
 
   document.addEventListener("keydown", e => {
@@ -326,7 +403,7 @@
     flushers = new Set();
     clearInterval(receptionTimer); receptionTimer = null;
     const r = parseRoute();
-    for (const a of shell.nav.querySelectorAll("a")) a.classList.toggle("active", location.hash.startsWith(a.getAttribute("href")) || (r.name === "patient" && a.getAttribute("href") === "#/patients"));
+    for (const a of [...shell.nav.querySelectorAll("a"), ...shell.tabbar.querySelectorAll("a")]) a.classList.toggle("active", location.hash.startsWith(a.getAttribute("href")) || (r.name === "patient" && a.getAttribute("href") === "#/patients"));
     const main = shell.main;
     const scroll = main.scrollTop;
     const sameView = main.dataset.view === location.hash;
@@ -364,9 +441,15 @@
       const days = at ? (Date.now() - new Date(at).getTime()) / 86400000 : Infinity;
       if (days > 7) main.prepend(h("div", { class: "notice warn" }, at ? `最後のバックアップから${Math.floor(days)}日経過しています。` : "まだバックアップを取っていません。", " ", h("a", { href: "#/admin" }, "管理画面でバックアップ")));
     });
+    const ib = installBanner(false, true);
+    if (ib) main.prepend(ib);
     const counts = cols.map(c => list.filter(e => e.status === c).length);
     main.appendChild(h("p", { class: "muted" }, `受付 ${list.length}名　`, cols.map((c, i) => `${M.encStatus[c]} ${counts[i]}　`)));
-    const board = h("div", { class: "board" });
+    const board = h("div", { class: "board", "data-lane": laneSel });
+    main.appendChild(h("div", { class: "lane-switch", role: "tablist", "aria-label": "表示する状態" }, cols.map((c, i) => h("button", {
+      type: "button", role: "tab", class: c === laneSel ? "on" : "", "aria-selected": c === laneSel ? "true" : "false",
+      onclick: e => { laneSel = c; board.dataset.lane = c; e.target.closest(".lane-switch").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b === e.currentTarget); b.setAttribute("aria-selected", b === e.currentTarget ? "true" : "false"); }); }
+    }, M.encStatus[c], h("span", { class: "count" }, counts[i])))));
     for (const c of cols) {
       const items = list.filter(e => e.status === c);
       board.appendChild(h("section", { class: "lane lane-" + c, "aria-label": M.encStatus[c] },
@@ -380,6 +463,7 @@
     }, 60000);
   }
 
+  let laneSel = "waiting";
   function encCard(e) {
     const p = ST.patient(e.patientId);
     if (!p) return null;
@@ -461,7 +545,7 @@
       const list = ST.searchPatients(q.value);
       const lastVisit = pid => { const e = ST.encountersOf(pid)[0]; return e ? e.date : ""; };
       if (!list.length) { out.appendChild(h("p", { class: "muted" }, "該当する患者はいません。")); return; }
-      out.appendChild(h("table", { class: "tbl hover" },
+      out.appendChild(h("table", { class: "tbl hover pt-list" },
         h("thead", null, h("tr", null, ["患者番号", "氏名", "カナ", "生年月日", "年齢", "性別", "電話", "最終受診", ""].map(x => h("th", null, x)))),
         h("tbody", null, list.slice(0, 200).map(p => h("tr", { tabindex: "0", onclick: () => go(`#/patient/${p.id}/${ST.can("clinical.view") ? "chart" : "info"}`), onkeydown: e => { if (e.key === "Enter") go(`#/patient/${p.id}/${ST.can("clinical.view") ? "chart" : "info"}`); } },
           h("td", { class: "mono" }, p.pid), h("td", null, h("b", null, p.name)), h("td", null, p.kana), h("td", null, U.wareki(p.birth)),
@@ -651,12 +735,19 @@
   function tabChart(pane, p) {
     const left = h("section", { class: "history-col", "aria-label": "過去の記載" });
     const right = h("section", { class: "editor-col", "aria-label": "本日の記載" });
-    pane.appendChild(h("div", { class: "chart-cols" }, left, right));
+    const cols = h("div", { class: "chart-cols", "data-pane": chartPane }, left, right);
+    const nPast = ST.notesOf(p.id).filter(n => !n.deleted && n.versions.length).length;
+    const sw = h("div", { class: "pane-switch", role: "tablist" }, [["edit", "記載する"], ["history", `過去の記載（${nPast}）`]].map(([k, label]) => h("button", {
+      type: "button", role: "tab", class: chartPane === k ? "on" : "", "aria-selected": chartPane === k ? "true" : "false",
+      onclick: e => { chartPane = k; cols.dataset.pane = k; sw.querySelectorAll("button").forEach(b => { const on = b === e.currentTarget; b.classList.toggle("on", on); b.setAttribute("aria-selected", on ? "true" : "false"); }); window.scrollTo(0, 0); shell.main.scrollTop = 0; }
+    }, label)));
+    pane.append(sw, cols);
     drawHistory(left, p);
     drawEditor(right, p);
   }
 
   let showDeleted = false;
+  let chartPane = "edit"; // スマホで表示する側
   function drawHistory(box, p) {
     U.clear(box);
     const me = ST.S.user.id;

@@ -209,8 +209,8 @@ function verifyAuth(req, body) {
 }
 
 // ------------------------------------------------------------------ HTTP
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".md": "text/plain; charset=utf-8" };
-const STATIC_OK = /^\/(index\.html|guide\.html|styles\.css|guide\.css|README\.md|js\/[\w.-]+\.js|vendor\/[\w.-]+\.js)$/;
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".md": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json" };
+const STATIC_OK = /^\/(index\.html|guide\.html|styles\.css|guide\.css|README\.md|sw\.js|manifest\.webmanifest|js\/[\w.-]+\.js|vendor\/[\w.-]+\.js|icons\/[\w.-]+\.png)$/;
 
 function send(res, code, obj, headers) {
   const body = typeof obj === "string" ? obj : JSON.stringify(obj);
