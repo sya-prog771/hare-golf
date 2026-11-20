@@ -247,7 +247,8 @@ function check(cond, msg) { if (cond) console.log("  ✓ " + msg); else { failur
   await page.waitForSelector(".verify .notice");
   check(await page.locator(".verify li", { hasText: "連番の欠落" }).count() === 1, "監査ログの欠落を検出");
 
-  const realErrors = errors.filter(e => !/favicon/.test(e));
+  // 院内サーバーかどうかの問い合わせ（api/info）に、ふつうのWebサーバーが 404 を返すのは正常
+  const realErrors = errors.filter(e => !/favicon/.test(e) && !/status of 404/.test(e));
   check(realErrors.length === 0, "JavaScript エラーなし" + (realErrors.length ? ": " + realErrors.join(" | ") : ""));
   await browser.close();
   srv.close();

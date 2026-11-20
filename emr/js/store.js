@@ -3,7 +3,6 @@
   "use strict";
   const C = g.EMRCrypto, DB = g.EMRDB, M = g.EMRMaster;
   const TYPES = ["staff", "settings", "patient", "encounter", "note", "problem", "rx", "lab", "doc", "audit"];
-  const MAX_FAILED = 5, LOCK_MS = 5 * 60 * 1000;
 
   const S = {
     dek: null, user: null, col: {}, auditSeq: 0, auditHash: "", corrupted: 0,
@@ -46,11 +45,46 @@
     requireLogin();
     if (!obj.id) obj.id = C.uid();
     const rec = await encRec(type, obj);
-    await DB.put("records", rec);
+    try { await DB.put("records", rec); }
+    catch (e) { await revert(type, obj.id); throw e; }
     S.col[type].set(obj.id, obj);
     if (!opts || !opts.silent) emit(type);
     return obj;
   }
+
+  /** 保存に失敗したとき、画面側で書き換えた内容を捨てて、保存済みの内容に戻す */
+  async function revert(type, id) {
+    const r = await DB.get("records", id);
+    if (!r) { S.col[type].delete(id); return; }
+    try { S.col[type].set(id, await C.decryptJson(S.dek, r, aad(type, id))); } catch (e) { /* 復号できないものは触らない */ }
+  }
+
+  /** ほかの端末からの変更を反映する（院内サーバー版） */
+  async function applyRemote(items) {
+    if (!S.dek) return;
+    const types = new Set();
+    for (const it of items) {
+      if (it.store === "records") {
+        try {
+          const obj = await C.decryptJson(S.dek, it.value, aad(it.value.type, it.value.id));
+          if (!S.col[it.value.type]) continue;
+          S.col[it.value.type].set(it.value.id, obj);
+          types.add(it.value.type);
+          if (it.value.type === "audit" && obj.seq > S.auditSeq) { S.auditSeq = obj.seq; S.auditHash = obj.hash; }
+        } catch (e) { S.corrupted++; }
+      } else if (it.store === "meta" && it.value.key === "auditTail" && it.value.seq > S.auditSeq) {
+        S.auditSeq = it.value.seq; S.auditHash = it.value.hash;
+      }
+    }
+    if (S.user && types.has("staff")) {
+      const me = S.col.staff.get(S.user.id);
+      if (me && !me.active) { emit("revoked"); return; }
+      if (me) S.user = me;
+    }
+    if (types.size && !(types.size === 1 && types.has("audit"))) emit("remote");
+  }
+  DB.onRemote(items => { applyRemote(items).catch(e => console.error(e)); });
+  DB.onReset(() => emit("reset"));
 
   async function loadAll() {
     resetCols();
@@ -91,7 +125,21 @@
       S.col.audit.set(entry.id, entry);
       S.auditSeq = seq; S.auditHash = entry.hash;
     };
-    S.q = S.q.then(run, run).catch(e => console.error("監査ログの保存に失敗", e));
+    // 院内サーバー版では複数の端末が同時に記録するので、末尾が先に進んでいたら最新の末尾につなぎ直す
+    const runRetry = async () => {
+      for (let i = 0; i < 10; i++) {
+        try { return await run(); }
+        catch (e) {
+          if (!e.conflict) throw e;
+          const tail = await DB.get("meta", "auditTail");
+          if (tail && tail.seq >= S.auditSeq) {
+            S.auditSeq = tail.seq; S.auditHash = tail.hash;
+          }
+        }
+      }
+      throw new Error("監査ログを記録できませんでした（同時アクセスが多すぎます）");
+    };
+    S.q = S.q.then(runRetry, runRetry).catch(e => console.error("監査ログの保存に失敗", e));
     return S.q;
   }
 
@@ -137,6 +185,11 @@
     const wrap = await C.wrapDek(dek, o.password);
     S.dek = dek;
     resetCols();
+    if (DB.mode === "server") {
+      const k = await C.serverAuthKey(dek);
+      await DB.initServer(k);
+      DB.setAuthKey(k);
+    }
     const staff = {
       id, loginId: o.loginId.trim(), name: o.name.trim(), role: "doctor", admin: true, active: true,
       license: o.license || "", mustChange: false, createdAt: nowIso()
@@ -148,7 +201,20 @@
     await audit("初期設定", { detail: `施設「${o.clinicName}」を作成` });
     await audit("ログイン");
     DB.persist();
+    DB.connect(staff.name);
     return staff;
+  }
+
+  /** ローカル版のバックアップから院内サーバーへ移行する（サーバーが空のときだけ） */
+  async function setupFromBackup(dump, loginId, password) {
+    if (!dump || dump.format !== "emr-local-backup" || !Array.isArray(dump.users) || !Array.isArray(dump.records)) throw new Error("バックアップファイルの形式が正しくありません");
+    const u = dump.users.find(x => x.loginId.toLowerCase() === String(loginId || "").trim().toLowerCase());
+    if (!u || !u.wrap) throw new Error("そのログインIDはバックアップの中にありません");
+    let dek;
+    try { dek = await C.unwrapDek(u.wrap, password); } catch (e) { throw new Error("パスワードが違います（バックアップを取ったときのパスワードを入力してください）"); }
+    const k = await C.serverAuthKey(dek);
+    await DB.initRestore(k, dump);
+    return login(loginId, password);
   }
 
   async function login(loginId, password) {
@@ -164,13 +230,18 @@
     if (!u.wrap) throw new Error("このIDは利用停止中です。管理者に連絡してください");
     let dek;
     try { dek = await C.unwrapDek(u.wrap, password); } catch (e) {
-      u.failed = (u.failed || 0) + 1;
-      if (u.failed >= MAX_FAILED) { u.lockedUntil = Date.now() + LOCK_MS; u.failed = 0; }
-      await DB.put("users", u);
+      await DB.loginFailed(u);
       throw generic;
     }
-    u.failed = 0; u.lockedUntil = 0;
-    await DB.put("users", u);
+    if (DB.mode === "server") {
+      DB.setAuthKey(await C.serverAuthKey(dek));
+      await DB.sync();
+    }
+    if (u.failed || u.lockedUntil) {
+      const cur = (await DB.get("users", u.id)) || u;
+      cur.failed = 0; cur.lockedUntil = 0;
+      await DB.put("users", cur);
+    }
     S.dek = dek;
     S.user = { id: u.id, name: "", role: "clerk" }; // 一時的（読み込み中）
     await loadAll();
@@ -178,14 +249,16 @@
     if (!staff || !staff.active) { clearSession(); throw new Error("このIDは利用停止中です。管理者に連絡してください"); }
     S.user = staff;
     await audit("ログイン");
+    DB.connect(staff.name);
     return staff;
   }
 
   function clearSession() {
     S.dek = null; S.user = null; resetCols();
+    DB.disconnect();
   }
   async function logout(reason) {
-    if (S.dek) { await audit("ログアウト", { detail: reason || "" }); await S.q; }
+    if (S.dek) { try { await audit("ログアウト", { detail: reason || "" }); await S.q; } catch (e) { /* 通信できなくてもログアウトはする */ } }
     clearSession();
   }
 
@@ -316,10 +389,16 @@
         const e = new Error(`同じカナ・生年月日の患者（${dup.pid} ${dup.name}）がすでに登録されています`);
         e.duplicate = dup; throw e;
       }
-      const st = settings();
-      const pid = String(st.nextPid || 1).padStart(6, "0");
-      st.nextPid = (st.nextPid || 1) + 1;
-      await save("settings", st, { silent: true });
+      // 患者番号の払い出し（ほかの端末と同時に登録しても番号が重ならないよう、競合したらやり直す）
+      let pid = null;
+      for (let i = 0; i < 8 && !pid; i++) {
+        const st = settings();
+        const n = st.nextPid || 1;
+        st.nextPid = n + 1;
+        try { await save("settings", st, { silent: true }); pid = String(n).padStart(6, "0"); }
+        catch (e) { if (!e.conflict) throw e; }
+      }
+      if (!pid) throw new Error("患者番号を払い出せませんでした。もう一度お試しください");
       p = { id: C.uid(), pid, createdAt: nowIso(), createdBy: S.user.id };
       for (const f of PATIENT_FIELDS) if (data[f] !== undefined) p[f] = data[f];
       p.updatedAt = nowIso(); p.updatedBy = S.user.id;
@@ -637,6 +716,14 @@
   async function lastBackup() { const m = await DB.get("meta", "lastBackup"); return m ? m.at : null; }
   async function importBackup(obj) {
     if (!obj || obj.format !== "emr-local-backup" || !Array.isArray(obj.records) || !Array.isArray(obj.users)) throw new Error("バックアップファイルの形式が正しくありません");
+    if (DB.mode === "server") {
+      // 院内サーバーの鍵が変わらないよう、同じ医療機関（同じ初期設定）のバックアップだけを受け付ける
+      const sample = obj.records.find(r => r.type === "settings") || obj.records[0];
+      if (sample) {
+        try { await C.decryptJson(S.dek, sample, aad(sample.type, sample.id)); }
+        catch (e) { throw new Error("別の医療機関（または別に初期設定した電子カルテ）のバックアップのため、院内サーバーには復元できません"); }
+      }
+    }
     await DB.replaceAll(obj);
     clearSession();
   }
@@ -646,7 +733,7 @@
 
   g.EMRStore = {
     S, TYPES, ymd, nowIso, addDays, age, norm, onChange, emit,
-    hasUsers, setup, login, logout, clearSession, changePassword, validatePassword,
+    hasUsers, setup, setupFromBackup, login, logout, clearSession, changePassword, validatePassword,
     can, need, createUser, updateUser, resetUserPassword, deactivateUser, loginInfo, staffName, staffList,
     settings, saveSettings, audit, verifyAudit,
     patients, patient, searchPatients, savePatient,

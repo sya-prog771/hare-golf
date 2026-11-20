@@ -143,6 +143,17 @@ details.card > summary { cursor: pointer; font-weight: 600; }
 .center-card .btn.big { width: 100%; margin-top: 6px; }
 .logo { width: 44px; height: 44px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 26px; font-weight: 700; margin-bottom: 10px; }
 
+/* ---------- 接続状態 ---------- */
+.conn { font-size: 12px; font-weight: 700; padding: 2px 10px 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
+.conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.conn.on { background: var(--ok-soft); color: var(--ok); }
+.conn.off { background: var(--danger-soft); color: var(--danger); }
+.conn.local { background: var(--surface-2); color: var(--text-2); }
+#offline-bar { background: var(--danger); color: #fff; padding: 8px 16px; font-weight: 600; font-size: 13px; }
+.steps-mini { padding-left: 1.4em; margin: 0 0 12px; }
+.steps-mini li { margin-bottom: 4px; }
+.login-mode { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+
 /* ---------- 外枠 ---------- */
 #app { min-height: 100%; display: flex; flex-direction: column; }
 .topbar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }

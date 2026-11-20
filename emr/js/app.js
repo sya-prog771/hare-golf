@@ -47,15 +47,19 @@
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 
   // ---------- 起動 ----------
+  const DB = window.EMRDB;
   async function boot() {
-    if (!window.EMRCrypto.available || !window.indexedDB) {
+    let info = null;
+    try { info = await DB.init(); } catch (e) { /* ローカル版として続ける */ }
+    if (!window.EMRCrypto.available || (DB.mode === "local" && !window.indexedDB)) {
       root.appendChild(h("div", { class: "center-card" }, h("h1", null, "電子カルテ"),
-        h("p", null, "このブラウザでは暗号化機能（Web Crypto）またはデータベース（IndexedDB）が使えません。"),
-        h("p", null, "最新の Chrome / Edge / Firefox / Safari で、https または localhost、ファイルとして直接開いてください。")));
+        h("p", null, "このブラウザでは必要な機能（乱数またはデータベース）が使えません。"),
+        h("p", null, "最新の Chrome / Edge / Firefox / Safari で開いてください。")));
       return;
     }
-    // 同時に2つのタブで開くとデータが食い違うので、1タブに限定する
-    if (navigator.locks && navigator.locks.request) {
+    DB.onStatus(updateConn);
+    // ローカル版は、同時に2つのタブで開くとデータが食い違うので、1タブに限定する
+    if (DB.mode === "local" && navigator.locks && navigator.locks.request) {
       let got = false;
       navigator.locks.request("emr-single-tab", { ifAvailable: true }, lock => {
         if (!lock) return null;
@@ -71,8 +75,48 @@
         return;
       }
     }
-    if (await ST.hasUsers()) renderLogin(); else renderSetup();
+    let has;
+    try { has = await ST.hasUsers(); }
+    catch (e) { root.appendChild(h("div", { class: "center-card" }, h("h1", null, "電子カルテ"), h("p", { class: "danger-text" }, e.message), h("button", { class: "btn primary", onclick: () => location.reload() }, "再読み込み"))); return; }
+    if (has) renderLogin(); else renderSetup();
+    void info;
   }
+
+  // ---------- 院内サーバーとの接続状態 ----------
+  function connBadge() {
+    if (DB.mode !== "server") return h("span", { class: "conn local", title: "データはこの端末のブラウザ内にだけ保存されています" }, "この端末のみ");
+    const on = DB.status !== "offline";
+    return h("span", { class: "conn " + (on ? "on" : "off"), role: "status", title: on ? "院内サーバー（親機）とつながっています" : "院内サーバー（親機）につながりません" }, on ? "院内サーバー接続中" : "サーバー未接続・再接続中…");
+  }
+  function updateConn() {
+    const old = document.querySelector(".topbar .conn");
+    if (old) old.replaceWith(connBadge());
+    const bar = document.getElementById("offline-bar");
+    if (DB.mode === "server" && DB.status === "offline" && ST.S.user) {
+      if (!bar) root.prepend(h("div", { id: "offline-bar", role: "alert" }, "⚠ 院内サーバー（親機）につながりません。親機のパソコンと黒い画面が起動しているか、この端末が院内の Wi-Fi につながっているか確認してください。つながると自動で再開します（入力中の内容は消えません）。"));
+    } else if (bar) {
+      bar.remove();
+      if (ST.S.user) { flushAll(); DB.sync().catch(() => { }); }
+    }
+  }
+
+  // ほかの端末で変更があったら、入力の邪魔にならないタイミングで画面を更新する
+  let remotePending = false;
+  ST.onChange(t => {
+    if (t === "remote") { remotePending = true; tryRemoteRender(); }
+    if (t === "reset" && ST.S.user) { ST.clearSession(); lockMessage = "管理者がバックアップからデータを復元しました。もう一度ログインしてください。"; renderLogin(); }
+    if (t === "revoked" && ST.S.user) { ST.clearSession(); lockMessage = "このIDは管理者によって利用停止されました。"; renderLogin(); }
+  });
+  function tryRemoteRender() {
+    if (!remotePending || !ST.S.user || !shell) return;
+    const a = document.activeElement;
+    const typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && shell.main.contains(a);
+    // 入力途中のフォーム（data-dirty）があるときは、書きかけを消さないよう自動更新しない
+    if (document.querySelector(".modal-back") || typing || shell.main.querySelector("form[data-dirty]")) return;
+    remotePending = false;
+    render();
+  }
+  setInterval(tryRemoteRender, 1500);
 
   // ---------- 初期設定 ----------
   function renderSetup() {
@@ -109,8 +153,11 @@
         } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = "はじめる"; }
       }
     },
-      h("h1", null, "電子カルテ 初期設定"),
-      h("p", { class: "muted" }, "最初に、医療機関名と管理者（医師）のアカウントを作ります。データはこの端末のブラウザ内に暗号化して保存され、外部には送信されません。"),
+      h("h1", null, DB.mode === "server" ? "電子カルテ 初期設定（院内サーバー）" : "電子カルテ 初期設定"),
+      h("p", { class: "muted" }, DB.mode === "server"
+        ? "最初に、医療機関名と管理者（医師）のアカウントを作ります。データは院内サーバー（親機）に暗号化して保存され、院内の端末からだけ使えます。インターネットには送信されません。"
+        : "最初に、医療機関名と管理者（医師）のアカウントを作ります。データはこの端末のブラウザ内に暗号化して保存され、外部には送信されません。"),
+      DB.mode === "server" ? h("p", { class: "small" }, "「この端末だけで使う版」ですでに使っている場合は ", h("button", { type: "button", class: "linkish", onclick: () => migrateDialog() }, "そのデータを引き継ぐ"), "（バックアップファイルから移行）") : null,
       field("医療機関名", f.clinic, { req: true }),
       h("div", { class: "grid2" }, field("ログインID", f.loginId, { req: true }), field("氏名", f.name, { req: true })),
       h("div", { class: "grid2" }, field("パスワード（8文字以上）", f.pw, { req: true }), field("パスワード（確認）", f.pw2, { req: true })),
@@ -119,6 +166,27 @@
       err, btn);
     root.appendChild(form);
     f.clinic.focus();
+  }
+
+  async function migrateDialog() {
+    const file = h("input", { type: "file", accept: ".json,application/json", class: "input" });
+    const id = inp({ autocomplete: "off" }), pw = inp({ type: "password", autocomplete: "off" });
+    const ok = await U.modal("ローカル版のデータを引き継ぐ", h("div", null,
+      h("ol", { class: "steps-mini" },
+        h("li", null, "これまで使っていた端末で、管理 → 「バックアップを書き出す」を押してファイルを保存"),
+        h("li", null, "そのファイル（emr-backup-….json）をこのパソコンにコピー（USBメモリなど）"),
+        h("li", null, "下で選んで、そのときのログインIDとパスワードを入力")),
+      field("バックアップファイル", file), h("div", { class: "grid2" }, field("ログインID", id), field("パスワード", pw))
+    ), [{ label: "キャンセル", value: null }, {
+      label: "引き継ぐ", cls: "primary", onClick: async () => {
+        if (!file.files[0]) throw new Error("ファイルを選んでください");
+        let obj;
+        try { obj = JSON.parse(await file.files[0].text()); } catch (e) { throw new Error("ファイルを読み込めませんでした"); }
+        await ST.setupFromBackup(obj, id.value, pw.value);
+        return true;
+      }
+    }]);
+    if (ok) { U.toast("データを引き継ぎました", "ok"); await afterLogin(); }
   }
 
   // ---------- ログイン ----------
@@ -141,7 +209,10 @@
       h("div", { class: "logo", "aria-hidden": "true" }, "✚"),
       h("h1", null, "電子カルテ"),
       field("ログインID", id), field("パスワード", pw), err, btn,
-      h("p", { class: "muted small" }, "共用端末では、離席時に必ずロックまたはログアウトしてください。"));
+      h("p", { class: "muted small" }, "共用端末では、離席時に必ずロックまたはログアウトしてください。"),
+      h("p", { class: "muted small login-mode" }, DB.mode === "server"
+        ? ["院内サーバーに接続しています（", location.host, "）　", h("a", { href: "guide.html", target: "_blank", rel: "noopener" }, "接続ガイド")]
+        : "この端末だけで使う版（データはこのブラウザ内に保存）"));
     root.appendChild(form);
     id.focus();
   }
@@ -221,6 +292,7 @@
       h("div", { class: "brand" }, h("span", { class: "logo-s", "aria-hidden": "true" }, "✚"), h("span", null, s.clinicName || "電子カルテ")),
       quick,
       h("div", { class: "who" },
+        connBadge(),
         h("span", { class: "today" }, U.jdateW(ST.ymd())),
         h("span", { class: "user" }, u.name, h("small", null, `（${M.roles[u.role]}${u.admin ? "・管理者" : ""}）`)),
         h("button", { class: "btn ghost sm", onclick: () => passwordDialog(false) }, "パスワード"),
@@ -417,6 +489,7 @@
 
   // ---------- 患者情報フォーム ----------
   function patientForm(p0, onSaved) {
+    const baseUpdated = p0 ? p0.updatedAt : null;
     const v = JSON.parse(JSON.stringify(p0 || { sex: "", insurance: { type: "社保", ratio: 30 }, allergies: [], emergency: {}, allergyNone: false }));
     v.insurance = v.insurance || {}; v.emergency = v.emergency || {}; v.allergies = v.allergies || [];
     const F = {};
@@ -448,8 +521,14 @@
 
     const err = h("div", { class: "form-err", role: "alert" });
     const form = h("form", {
-      class: "card form", onsubmit: async e => {
+      class: "card form", oninput: () => { form.dataset.dirty = "1"; }, onchange: () => { form.dataset.dirty = "1"; }, onsubmit: async e => {
         e.preventDefault(); err.textContent = "";
+        // ほかの端末（または別の人）がこのフォームを開いた後に変更していたら、上書きせずに知らせる
+        if (p0 && ST.patient(p0.id) && ST.patient(p0.id).updatedAt !== baseUpdated) {
+          U.clear(err).append("ほかの端末でこの患者の情報が変更されました（", ST.staffName(ST.patient(p0.id).updatedBy), "）。上書きを防ぐため保存していません。 ",
+            h("button", { type: "button", class: "btn sm", onclick: () => render() }, "最新の内容を読み込む"));
+          return;
+        }
         const kana = F.kana.value.trim().normalize("NFKC").replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
         if (kana && !/^[゠-ヿ\s]+$/.test(kana)) { err.textContent = "カナはカタカナ（またはひらがな）で入力してください"; F.kana.focus(); return; }
         if (F.birth.value && F.birth.value > ST.ymd()) { err.textContent = "生年月日が未来の日付です"; return; }
@@ -1159,6 +1238,23 @@
       h("table", { class: "tbl" }, h("thead", null, h("tr", null, ["ログインID", "氏名", "職種", "状態", ""].map(x => h("th", null, x)))), h("tbody", null, userRows)),
       h("p", { class: "muted small" }, "権限: 医師＝すべての診療記録・処方・病名・文書／看護師＝看護記録・バイタル・検査入力（診療録の確定と処方は不可）／医療事務＝受付・患者登録・会計（診療内容は閲覧不可）。")));
 
+    // 院内ネットワーク
+    if (DB.mode === "server") {
+      const card = h("section", { class: "card" }, h("h2", null, "院内ネットワーク（院内サーバー版）"), h("p", { class: "muted" }, "読み込み中…"));
+      main.appendChild(card);
+      DB.statusInfo().then(st => {
+        U.clear(card).append(h("h2", null, "院内ネットワーク（院内サーバー版）"),
+          h("p", null, "子機から開くアドレス: ", h("b", { class: "mono" }, (st.addresses.find(a => a.recommended) || {}).url || "（ネットワーク未接続）")),
+          h("p", null, `接続中・最近つながった端末: ${st.clients.length}台　／　自動バックアップ: ${st.backups.count}日分（最新 ${st.backups.last || "なし"}）`),
+          h("p", { class: "muted small" }, `親機の保存場所: ${st.dataDir}`),
+          h("a", { class: "btn", href: "guide.html", target: "_blank", rel: "noopener" }, "接続ガイドを開く（子機の追加・困ったとき）"));
+      }).catch(() => { U.clear(card).append(h("h2", null, "院内ネットワーク"), h("p", { class: "danger-text" }, "院内サーバーの状態を取得できませんでした")); });
+    } else {
+      main.appendChild(h("section", { class: "card" }, h("h2", null, "院内ネットワーク"),
+        h("p", null, "今は「この端末だけで使う版」です。受付・診察室など複数の端末で同じカルテを使いたい場合は、院内サーバー版に切りかえられます（インターネット不要）。"),
+        h("a", { class: "btn", href: "guide.html", target: "_blank", rel: "noopener" }, "院内ネットワークで使う方法を見る")));
+    }
+
     // バックアップ
     const last = await ST.lastBackup();
     const file = h("input", { type: "file", accept: ".json,application/json", class: "input" });
@@ -1168,7 +1264,8 @@
     main.appendChild(h("section", { class: "card" }, h("h2", null, "バックアップ・復元"),
       h("p", null, `件数: ${counts}`),
       h("p", { class: last ? "" : "danger-text" }, last ? `前回のバックアップ: ${U.jdt(last)}` : "まだバックアップを取っていません。"),
-      h("p", { class: "muted small" }, `ブラウザの永続保存: ${persisted ? "有効（容量不足でも自動削除されにくい）" : "未許可（ブラウザが容量不足時にデータを消す可能性があります。定期的なバックアップが必須です）"}`),
+      DB.mode === "server" ? null : h("p", { class: "muted small" }, `ブラウザの永続保存: ${persisted ? "有効（容量不足でも自動削除されにくい）" : "未許可（ブラウザが容量不足時にデータを消す可能性があります。定期的なバックアップが必須です）"}`),
+      DB.mode === "server" ? h("p", { class: "small" }, "院内サーバー版では、親機が毎日自動でバックアップを作ります（30日分）。それとは別に、週に1回はここから書き出して USB メモリなど別の場所に保管してください。") : null,
       h("p", { class: "muted small" }, "バックアップファイルは暗号化されたままで出力されます。開くには、バックアップ時点で有効だった利用者のパスワードが必要です。外付け媒体など別の場所に保管してください。"),
       h("div", { class: "row" },
         h("button", {

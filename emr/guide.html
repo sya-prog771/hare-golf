@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>院内ネットワーク接続ガイド</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body class="guide">
+<header class="g-hero">
+  <div class="g-wrap">
+    <p class="g-kicker">電子カルテ</p>
+    <h1>院内ネットワークで使う<br>接続ガイド</h1>
+    <p class="g-lead">はじめてネットワークの設定をする方向けです。上から順番にやれば、<b>15分ほど</b>で受付・診察室・タブレットなど何台でも同じカルテが使えるようになります。<br><b>インターネットは不要</b>です（院内の Wi-Fi ルーターがあれば動きます）。</p>
+  </div>
+</header>
+
+<main class="g-wrap">
+
+  <!-- ===== 親機の状態（親機から配信されたときだけ表示） ===== -->
+  <section id="live" class="g-live" aria-live="polite">
+    <div id="live-off">
+      <h2>親機の状態</h2>
+      <p>このページはファイルとして開かれています。<b>親機を起動すると</b>、ここに「子機で入力するアドレス」と「QRコード」が表示されます（手順4）。</p>
+    </div>
+    <div id="live-on" hidden>
+      <p class="g-ok-big">✅ 親機は動いています</p>
+      <div class="g-addr">
+        <div>
+          <p class="g-addr-label">子機（ほかのパソコン・タブレット）で開くアドレス</p>
+          <p class="g-addr-url"><span id="live-url">—</span></p>
+          <div class="row">
+            <button type="button" class="btn" id="copy-btn">アドレスをコピー</button>
+            <a class="btn primary" id="open-app" href="./">電子カルテを開く</a>
+          </div>
+          <p class="small muted" id="live-alt"></p>
+          <p class="small" id="live-you"></p>
+        </div>
+        <div class="g-qr-box">
+          <div id="live-qr" aria-label="子機用アドレスのQRコード"></div>
+          <p class="small muted">iPad・スマホはカメラで読み取る</p>
+        </div>
+      </div>
+      <div id="live-warn"></div>
+      <h3>いまつながっている端末 <span id="live-count" class="badge">0台</span></h3>
+      <ul id="live-clients" class="g-clients"></ul>
+      <p class="small muted" id="live-data"></p>
+    </div>
+  </section>
+
+  <!-- ===== 全体のイメージ ===== -->
+  <section class="g-sec">
+    <h2>まず、全体のイメージ</h2>
+    <p>院内のパソコンを1台だけ<b>「親機（おやき）」</b>にします。カルテのデータは親機に保存されます。<br>
+      ほかの端末（<b>「子機」</b>）は、ブラウザで親機のアドレスを開くだけ。子機に何かをインストールする必要はありません。</p>
+    <figure class="g-diagram">
+      <svg viewBox="0 0 720 300" role="img" aria-label="親機と子機がWi-Fiルーターを通してつながる図">
+        <g class="d-line"><line x1="360" y1="150" x2="130" y2="150"/><line x1="360" y1="150" x2="560" y2="60"/><line x1="360" y1="150" x2="590" y2="150"/><line x1="360" y1="150" x2="560" y2="240"/></g>
+        <g transform="translate(40,95)"><rect class="d-box hi" width="180" height="110" rx="12"/><text class="d-t" x="90" y="38" text-anchor="middle">親機</text><text class="d-s" x="90" y="62" text-anchor="middle">受付のパソコンなど</text><text class="d-s" x="90" y="84" text-anchor="middle">カルテのデータを保存</text></g>
+        <g transform="translate(300,115)"><rect class="d-box" width="120" height="70" rx="35"/><text class="d-t" x="60" y="32" text-anchor="middle">Wi-Fi</text><text class="d-s" x="60" y="52" text-anchor="middle">ルーター</text></g>
+        <g transform="translate(520,25)"><rect class="d-box" width="170" height="60" rx="10"/><text class="d-t2" x="85" y="27" text-anchor="middle">子機：診察室PC</text><text class="d-s" x="85" y="47" text-anchor="middle">ブラウザで開くだけ</text></g>
+        <g transform="translate(540,120)"><rect class="d-box" width="150" height="60" rx="10"/><text class="d-t2" x="75" y="27" text-anchor="middle">子機：iPad</text><text class="d-s" x="75" y="47" text-anchor="middle">QRコードで開く</text></g>
+        <g transform="translate(520,215)"><rect class="d-box" width="170" height="60" rx="10"/><text class="d-t2" x="85" y="27" text-anchor="middle">子機：処置室PC</text><text class="d-s" x="85" y="47" text-anchor="middle">何台でもOK</text></g>
+        <text class="d-s" x="245" y="140" text-anchor="middle">LANケーブル</text><text class="d-s" x="245" y="172" text-anchor="middle">または Wi-Fi</text>
+      </svg>
+    </figure>
+    <details class="g-words">
+      <summary>ことばの説明（わからない言葉が出てきたら）</summary>
+      <dl>
+        <dt>親機</dt><dd>カルテのデータを置くパソコン。診療中は電源を入れたままにします。</dd>
+        <dt>子機</dt><dd>カルテを見たり書いたりする端末。パソコン・iPad・Android タブレットなど。</dd>
+        <dt>Wi-Fi ルーター</dt><dd>院内の端末どうしをつなぐ箱。インターネット回線とは別の役割で、回線がなくても院内の通信はできます。</dd>
+        <dt>アドレス（IPアドレス）</dt><dd>院内での親機の「住所」。<code>http://192.168.1.23:8080</code> のような形で、親機の黒い画面とこのページに表示されます。</dd>
+        <dt>黒い画面</dt><dd>親機で起動ファイルを開くと出る文字だけの画面。これが開いている間だけ、子機からカルテが使えます。</dd>
+      </dl>
+    </details>
+  </section>
+
+  <section class="g-sec g-choose">
+    <h2>どちらの使い方ですか？</h2>
+    <div class="g-cards">
+      <div class="g-card">
+        <h3>パソコン1台だけで使う</h3>
+        <p>ネットワークの設定は<b>いりません</b>。<code>emr</code> フォルダの中の <code>index.html</code> をダブルクリックするだけで使えます。</p>
+        <p class="small muted">あとから複数台に増やしたくなったら、データを引き継いで下の方法に切りかえられます。</p>
+      </div>
+      <div class="g-card hi">
+        <h3>2台以上で同じカルテを使う</h3>
+        <p>このページの<b>手順1〜6</b>をやってください。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 手順 ===== -->
+  <div class="g-os" role="tablist" aria-label="親機のパソコンの種類">
+    <span>親機のパソコンは：</span>
+    <button type="button" role="tab" data-os="win" class="on" aria-selected="true">Windows</button>
+    <button type="button" role="tab" data-os="mac" aria-selected="false">Mac</button>
+  </div>
+
+  <ol class="g-steps">
+    <li class="g-step" id="step1">
+      <h2><span class="g-num">1</span>準備するもの</h2>
+      <ul class="g-check">
+        <li><label><input type="checkbox" data-k="c1"> 親機にするパソコン1台（Windows 10・11 または Mac）。<b>診療中ずっと電源を入れておける</b>もの。受付のパソコンがおすすめです</label></li>
+        <li><label><input type="checkbox" data-k="c2"> 院内の Wi-Fi ルーター。親機と子機が<b>同じルーター</b>につながっていること</label></li>
+        <li><label><input type="checkbox" data-k="c3"> 子機（パソコン・iPad・Android タブレット）。ブラウザが使えればOK</label></li>
+        <li><label><input type="checkbox" data-k="c4"> この電子カルテの <code>emr</code> フォルダ</label></li>
+      </ul>
+      <p class="g-tip">💡 インターネットが必要なのは、手順2で Node.js を入手する<b>最初の1回だけ</b>です。院内にインターネットがない場合は、自宅などのパソコンでダウンロードして USB メモリで持ってきてください。</p>
+    </li>
+
+    <li class="g-step" id="step2">
+      <h2><span class="g-num">2</span>親機に「Node.js（ノード ジェイエス）」を入れる <small>最初の1回だけ</small></h2>
+      <p>親機を動かすための無料の部品です。</p>
+      <ol class="g-sub">
+        <li>ブラウザで <b>nodejs.org/ja</b> を開く</li>
+        <li>「<b>LTS</b>」と書かれたほうの<b>ダウンロード</b>ボタンを押す（「最新版」ではなく LTS）</li>
+        <li class="os-win">ダウンロードしたファイル（<code>node-v○○-x64.msi</code>）をダブルクリック</li>
+        <li class="os-mac" hidden>ダウンロードしたファイル（<code>node-v○○.pkg</code>）をダブルクリック</li>
+        <li class="os-win">「<b>Next</b>」を押していく。設定は<b>何も変えなくて大丈夫</b>です。途中の「Tools for Native Modules」のチェックは<b>入れなくてOK</b></li>
+        <li class="os-mac" hidden>「<b>続ける</b>」→「<b>インストール</b>」。Mac のパスワードを聞かれたら入力</li>
+        <li class="os-win">「<b>Finish</b>」で完了</li>
+        <li class="os-mac" hidden>「インストールが完了しました」で「閉じる」</li>
+      </ol>
+    </li>
+
+    <li class="g-step" id="step3">
+      <h2><span class="g-num">3</span>電子カルテのフォルダを親機に置く</h2>
+      <ol class="g-sub">
+        <li><code>emr</code> フォルダを、親機の<b>ドキュメント</b>などわかりやすい場所にコピーする</li>
+        <li>置いたら、<b>あとから場所を動かさない</b>でください（カルテのデータは <code>emr/server/data</code> に保存されます）</li>
+      </ol>
+    </li>
+
+    <li class="g-step" id="step4">
+      <h2><span class="g-num">4</span>親機を起動する</h2>
+      <ol class="g-sub">
+        <li class="os-win"><code>emr</code> フォルダの中の「<b>電子カルテを起動（Windows）.bat</b>」をダブルクリック</li>
+        <li class="os-mac" hidden><code>emr</code> フォルダの中の「<b>電子カルテを起動（Mac）.command</b>」をダブルクリック</li>
+        <li class="os-win">青い画面で「Windows によって PC が保護されました」と出たら → 「<b>詳細情報</b>」→「<b>実行</b>」</li>
+        <li class="os-mac" hidden>「開発元を確認できないため開けません」と出たら → 「完了」を押してから、<b>システム設定 → プライバシーとセキュリティ</b> を開き、下の方の「<b>このまま開く</b>」を押す（古い Mac では、ファイルを右クリック →「開く」→「開く」）</li>
+        <li><b>黒い画面</b>が出て「<b>起動しました</b>」と表示されれば成功です。この画面は<b>閉じないでください</b></li>
+      </ol>
+      <div class="g-important os-win">
+        <p class="g-important-title">⚠ ここが一番大事</p>
+        <p>初回は「<b>Windows セキュリティの重要な警告</b>」という画面が出ます。</p>
+        <p>①「<b>プライベート ネットワーク</b>」に<b>チェック</b>を入れる　②「<b>アクセスを許可する</b>」を押す</p>
+        <p class="small">これを押さないと、子機からつながりません。うっかり閉じてしまったら、下の「<a href="#trouble">つながらないとき</a>」の④を見てください。</p>
+      </div>
+      <div class="g-important os-mac" hidden>
+        <p class="g-important-title">⚠ ここが一番大事</p>
+        <p>「“node”がネットワーク上の受信接続を許可しますか？」と出たら「<b>許可</b>」を押してください。</p>
+        <p class="small">これを押さないと、子機からつながりません。</p>
+      </div>
+      <p>起動すると、このページが親機のブラウザで自動で開き、一番上に「<b>✅ 親機は動いています</b>」と表示されます。</p>
+    </li>
+
+    <li class="g-step" id="step5">
+      <h2><span class="g-num">5</span>初期設定をする（親機で1回だけ）</h2>
+      <ol class="g-sub">
+        <li>親機のブラウザで <code>http://localhost:8080</code> を開く（このページの一番上の「電子カルテを開く」でもOK）</li>
+        <li>医療機関名と、管理者（医師）のログインID・パスワードを登録する</li>
+        <li>すでに「1台だけで使う版」を使っていた場合は、初期設定画面の「<b>そのデータを引き継ぐ</b>」から、バックアップファイルで移行できます</li>
+      </ol>
+      <p class="g-tip">💡 管理者は<b>2人以上</b>作っておくのがおすすめです。管理者がパスワードを忘れても、もう1人が再発行できます。</p>
+    </li>
+
+    <li class="g-step" id="step6">
+      <h2><span class="g-num">6</span>子機をつなぐ</h2>
+      <p>子機は、<b>親機と同じ Wi-Fi</b> につないでおいてください（「ゲスト」「Guest」と付いた Wi-Fi は不可）。</p>
+      <div class="g-cards three">
+        <div class="g-card">
+          <h3>パソコン</h3>
+          <ol class="g-sub">
+            <li>Chrome・Edge・Safari などのブラウザを開く</li>
+            <li>上のアドレス欄に、親機に表示されているアドレス（例 <code>http://192.168.1.23:8080</code>）を<b>そのまま</b>入力して Enter</li>
+            <li>ログイン画面が出たら、<b>お気に入り（ブックマーク）</b>に登録</li>
+          </ol>
+        </div>
+        <div class="g-card">
+          <h3>iPad・iPhone</h3>
+          <ol class="g-sub">
+            <li>カメラアプリで、親機の画面の <b>QRコード</b>を写す</li>
+            <li>出てきた黄色い表示をタップ</li>
+            <li>Safari で開いたら、共有ボタン（□に↑）→「<b>ホーム画面に追加</b>」</li>
+          </ol>
+        </div>
+        <div class="g-card">
+          <h3>Android</h3>
+          <ol class="g-sub">
+            <li>カメラ（または Google レンズ）で <b>QRコード</b>を写す</li>
+            <li>Chrome で開く</li>
+            <li>右上の︙ →「<b>ホーム画面に追加</b>」</li>
+          </ol>
+        </div>
+      </div>
+      <p class="g-ok">✅ ログイン画面の下に「<b>院内サーバーに接続しています</b>」と出ていれば完了です。ログイン後は画面右上に緑色の「院内サーバー接続中」が表示されます。</p>
+    </li>
+  </ol>
+
+  <!-- ===== おすすめ設定 ===== -->
+  <section class="g-sec">
+    <h2>やっておくと安心な設定（おすすめ）</h2>
+    <details class="g-acc">
+      <summary>親機がスリープしないようにする</summary>
+      <p>親機がスリープすると、子機からカルテが使えなくなります。</p>
+      <ul class="os-win">
+        <li>スタート → <b>設定</b> → <b>システム</b> → <b>電源</b>（または「電源とバッテリー」）→「<b>画面とスリープ</b>」</li>
+        <li>「電源接続時に、次の時間が経過した後にデバイスをスリープ状態にする」を「<b>なし</b>」にする（画面が消えるのは問題ありません）</li>
+      </ul>
+      <ul class="os-mac" hidden>
+        <li>アップルメニュー → <b>システム設定</b> → <b>ディスプレイ</b> →「詳細設定…」（ノートの場合は「<b>バッテリー</b>」→「オプション…」）</li>
+        <li>「<b>ディスプレイがオフのときに自動でスリープさせない</b>」（電源アダプタ使用時）をオンにする</li>
+      </ul>
+    </details>
+    <details class="g-acc">
+      <summary>親機のアドレスが変わらないようにする</summary>
+      <p>ルーターの電源を入れ直したときなどに、親機のアドレスの数字が変わることがあります。変わると、子機のブックマークでつながらなくなります（親機の黒い画面に「アドレスが変わりました」と表示されます）。</p>
+      <p><b>かんたんな方法：名前で開く</b><br>
+        子機で <code id="mdns-url">http://（親機の名前）.local:8080</code> を開くと、アドレスが変わってもつながります。iPad・iPhone・Mac・Windows ではたいてい使えます（Android では使えないことがあります）。</p>
+      <p><b>確実な方法：ルーターで固定する</b><br>
+        ルーターの設定画面で「<b>DHCP 固定割当</b>」「<b>IPアドレスの予約</b>」などの項目を探し、親機を登録します。名前はルーターのメーカーによって違うので、説明書かメーカーのサイトで「固定IP」と調べてください。わからなければ、ルーターを設置した業者さんに「このパソコンのIPアドレスを固定してほしい」と頼めば通じます。</p>
+    </details>
+    <details class="g-acc">
+      <summary>パソコンの電源を入れたら自動で親機を起動する</summary>
+      <ul class="os-win">
+        <li>キーボードの <kbd>Windows</kbd> キーと <kbd>R</kbd> を同時に押す → <code>shell:startup</code> と入力して Enter</li>
+        <li>開いたフォルダに、「電子カルテを起動（Windows）.bat」を<b>右クリックでドラッグ</b>して「<b>ショートカットをここに作成</b>」</li>
+      </ul>
+      <ul class="os-mac" hidden>
+        <li>アップルメニュー → <b>システム設定</b> → <b>一般</b> → <b>ログイン項目</b></li>
+        <li>「＋」を押して「電子カルテを起動（Mac）.command」を選ぶ</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="g-sec">
+    <h2>毎日の使い方</h2>
+    <div class="g-cards">
+      <div class="g-card"><h3>☀ 朝</h3><p>親機の電源を入れて、起動ファイルをダブルクリック（自動起動にしていれば不要）。子機はブックマークを開いてログイン。</p></div>
+      <div class="g-card"><h3>🌙 夜</h3><p>そのまま電源を入れておいても大丈夫です。終了するときは、黒い画面で <kbd>Ctrl</kbd>＋<kbd>C</kbd>。<span class="small muted">（×で閉じてもデータは消えません）</span></p></div>
+      <div class="g-card"><h3>💾 バックアップ</h3><p>親機が<b>毎日自動で</b>作ります（<code>emr/server/data/backups</code>、30日分）。<b>週に1回</b>は、管理画面の「バックアップを書き出す」で USB メモリなど<b>親機とは別の場所</b>にも保存してください。</p></div>
+    </div>
+  </section>
+
+  <!-- ===== トラブル ===== -->
+  <section class="g-sec" id="trouble">
+    <h2>うまくいかないとき</h2>
+    <p>症状に近いものを開いてください。</p>
+
+    <details class="g-acc" open>
+      <summary>子機で「このサイトにアクセスできません」「接続がタイムアウトしました」と出る</summary>
+      <p>上から順に確認してください。たいてい①〜④のどれかです。</p>
+      <ol class="g-sub">
+        <li><b>親機の黒い画面は開いていますか？</b> 閉じていたら、起動ファイルをもう一度ダブルクリック。</li>
+        <li><b>親機のパソコン自身では開けますか？</b> 親機のブラウザで <code>http://localhost:8080</code> を開く。開けなければ親機の問題なので、黒い画面に出ているメッセージを確認。</li>
+        <li><b>子機は親機と同じ Wi-Fi ですか？</b> Wi-Fi の名前（SSID）を見比べてください。「ゲスト」「Guest」「-g」が付いた Wi-Fi は、ほかの端末と通信できないようになっています。スマホ・タブレットは、モバイル通信（4G/5G）ではなく Wi-Fi になっているか確認。</li>
+        <li class="os-win"><b>Windows のファイアウォールで止められていませんか？</b>
+          <ul>
+            <li>スタート → 設定 → ネットワークとインターネット → <b>Wi-Fi</b>（有線なら<b>イーサネット</b>）→ つながっているネットワーク名 →「ネットワーク プロファイルの種類」を「<b>プライベート ネットワーク</b>」にする</li>
+            <li>それでもだめなら：スタートで「<b>ファイアウォール</b>」と検索 →「Windows Defender ファイアウォール」→ 左の「Windows Defender ファイアウォールを介したアプリまたは機能を許可」→「設定の変更」→ 一覧の「<b>Node.js JavaScript Runtime</b>」の「<b>プライベート</b>」にチェック → OK</li>
+          </ul>
+        </li>
+        <li class="os-mac" hidden><b>Mac のファイアウォールで止められていませんか？</b> システム設定 → ネットワーク → ファイアウォール →「オプション」→ 一覧の「node」を「<b>受信接続を許可</b>」にする。</li>
+        <li><b>セキュリティソフト</b>（ウイルスバスター、ノートン、ESET など）を入れていませんか？ そのソフト独自のファイアウォールで止まっていることがあります。ソフトの設定で「Node.js」または「node」を許可してください。</li>
+        <li><b>アドレスの数字が変わっていませんか？</b> 親機の黒い画面（またはこのページの一番上）に出ている最新のアドレスで開き直し、ブックマークを作り直してください。</li>
+        <li><b>ルーターの「端末どうしの通信をさせない」設定</b>がオンになっていませんか？ ルーターによって「プライバシーセパレーター」「AP アイソレーション」「ネットワーク分離」などの名前です。オフにしてください。</li>
+      </ol>
+    </details>
+    <details class="g-acc">
+      <summary>起動ファイルを開いても黒い画面がすぐ消える／「node が見つかりません」と出る</summary>
+      <p>Node.js が入っていません。<a href="#step2">手順2</a>をやってください。入れた直後なら、<b>パソコンを再起動</b>してからもう一度試してください。</p>
+    </details>
+    <details class="g-acc">
+      <summary>「すでに起動しているようです」と出る</summary>
+      <p>黒い画面がもう1つ開いています。画面の下のタスクバー（Mac は Dock）を確認して、開いている方を使ってください。</p>
+    </details>
+    <details class="g-acc">
+      <summary>「ポート 8080 は使用中のため、8081 を試します」と出た</summary>
+      <p>ほかのソフトが同じ番号を使っていたので、自動で別の番号にしました。子機で開くアドレスの最後も <code>:8081</code> などに変わるので、黒い画面に出ているアドレスで開いてください。</p>
+    </details>
+    <details class="g-acc">
+      <summary>子機の画面に赤い「サーバー未接続・再接続中…」が出る</summary>
+      <p>親機と通信できていません。親機がスリープしていないか、電源が切れていないか、子機の Wi-Fi が切れていないかを確認してください。つながれば<b>自動で再開</b>します。入力中の内容は消えません。</p>
+    </details>
+    <details class="g-acc">
+      <summary>「時刻のずれが大きすぎます」と出る</summary>
+      <p>子機の時計がずれています。子機の設定で「日付と時刻」を「<b>自動で設定</b>」にしてください。</p>
+    </details>
+    <details class="g-acc">
+      <summary>「院内ネットワーク以外からの接続は受け付けません」と出る</summary>
+      <p>安全のため、院内の Wi-Fi からしかつながらないようになっています。子機がモバイル通信や VPN 経由になっていないか確認してください。</p>
+    </details>
+    <details class="g-acc">
+      <summary>パスワードを忘れた</summary>
+      <p>管理者に「<b>管理 → 利用者 → パスワード再発行</b>」をしてもらってください。<br>
+        管理者本人が忘れて、ほかに管理者がいない場合は、<b>データを開く方法がありません</b>（暗号化しているため、開発者でも開けません）。管理者は必ず2人以上作っておいてください。</p>
+    </details>
+  </section>
+
+  <section class="g-sec">
+    <h2>安全のために守ること</h2>
+    <ul class="g-rules">
+      <li>院内の Wi-Fi には必ず<b>パスワード</b>をかける（WPA2 または WPA3）。患者さん用のフリー Wi-Fi は、ルーターの「ゲスト」機能で<b>分ける</b>。</li>
+      <li>ルーターで「<b>ポート開放</b>」をしない。親機は院内からの接続だけを受け付ける作りですが、外から入れる設定は絶対にしないでください。</li>
+      <li>親機のパソコンにも<b>ログインパスワード</b>をかけ、席を離れるときはロックする（<kbd>Windows</kbd>＋<kbd>L</kbd>）。</li>
+      <li>カルテの中身は子機の中で<b>暗号化してから</b>親機に送られます。院内の通信を盗み見られても、カルテの内容は読めません。親機のパソコンにも暗号化されたまま保存されます。</li>
+    </ul>
+  </section>
+
+  <p class="g-foot muted small">この電子カルテは試作です。実際の診療で使う前に、厚生労働省「医療情報システムの安全管理に関するガイドライン」に沿った運用ができているか確認してください。</p>
+</main>
+<script src="vendor/qrcode.js"></script>
+<script src="js/guide.js"></script>
+</body>
+</html>
