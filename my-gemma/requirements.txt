@@ -1,0 +1,3 @@
+torch>=2.1
+numpy
+# 任意: pyarrow（ウィキペディアの読み込み）/ transformers（test_vs_hf.py の照合）

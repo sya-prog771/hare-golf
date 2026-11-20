@@ -65,7 +65,7 @@ class App:
 
     def context_budget(self):
         # 日本語はおよそ1文字≒1トークン。指示文と出力のぶんを残して6割を資料に使う
-        return max(3000, int(int(self.config["num_ctx"]) * 0.6))
+        return max(1000, int(int(self.config["num_ctx"]) * 0.6))
 
 
 class Handler(BaseHTTPRequestHandler):
