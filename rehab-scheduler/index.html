@@ -213,7 +213,7 @@ function defaultState(){
     settings:defaultSettings(),therapists:s.therapists,patients:s.patients,
     patterns:builtinPatterns(),curPattern:'平日標準',
     gen:{start:today,days:1,wdPattern:{0:'日祝（最小体制）',6:'土曜（短縮）'},holidays:'',holidayPattern:'日祝（最小体制）'},
-    rules:[],result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,ptView:'grid',irrDate:'',thShowAbsent:false,mq:'',mWard:'',tmDisc:''},sample:true
+    rules:[],result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,ptView:'grid',irrDate:'',catQ:'',catC:'',fzPage:1,fzOnly:'',thShowAbsent:false,mq:'',mWard:'',tmDisc:''},sample:true
   };
 }
 let state;
@@ -520,12 +520,12 @@ function unassignedList(day){
 function curDay(){if(!state.result)return null;return state.result.days.find(d=>d.date===state.ui.day)||state.result.days[0]}
 
 /* ================= 画面 ================= */
-const TABS=[['gen','作成・結果'],['th','療法士別 予定表'],['pt','患者別 予定'],['un','未割当'],['irr','イレギュラー対応'],['pm','患者マスタ'],['tm','療法士マスタ'],['set','設定・パターン'],['io','データ入出力']];
+const TABS=[['gen','作成・結果'],['th','療法士別 予定表'],['pt','患者別 予定'],['un','未割当'],['irr','イレギュラー対応'],['cat','イレギュラー一覧'],['pm','患者マスタ'],['tm','療法士マスタ'],['set','設定・パターン'],['io','データ入出力']];
 function render(){
   rebuildMaps();
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" class="${state.ui.tab===k?'on':''}">${l}</button>`).join('');
   effCache.clear();
-  const f={gen:vGen,th:vTh,pt:vPt,un:vUn,irr:vIrr,pm:vPm,tm:vTm,set:vSet,io:vIo}[state.ui.tab]||vGen;
+  const f={gen:vGen,th:vTh,pt:vPt,un:vUn,irr:vIrr,cat:vCat,pm:vPm,tm:vTm,set:vSet,io:vIo}[state.ui.tab]||vGen;
   $('#main').innerHTML=f();
   if(state.ui.tab==='pm')renderPmBody();
 }
@@ -936,23 +936,222 @@ function fuzzOne(seed){
     return{date:sc.date,pattern:'test',S:ctx.S,sessions:res.sessions.map((s,i)=>({...s,id:i+1})),nextId:res.sessions.length+1,req,reasons:res.reasons,excluded:ctx.excluded,working:ctx.ths.map(t=>t.id),fixFail:res.fixFail}};
   let day=run([]);
   if(sc.doLock&&day.sessions.length){const pre=day.sessions.filter((_,i)=>i%3===0).map(s=>({...s,locked:true}));day=run(pre);
-    const kept=pre.filter(L=>day.sessions.some(s=>s.p===L.p&&s.t===L.t&&s.s===L.s&&s.locked));if(kept.length!==pre.length)return['固定した予定が消えた'];}
+    const kept=pre.filter(L=>day.sessions.some(s=>s.p===L.p&&s.t===L.t&&s.s===L.s&&s.locked));if(kept.length!==pre.length)return{v:['固定した予定が消えた'],n:day.sessions.length};}
   const v=verifyDay(day,sc.wl).map(x=>x[1]+'：'+x[2]);
   if(sc.doRender){state.result={days:[day],created:''};state.ui.day=day.date;vTh();vPt();vUn();vIrr();vGen();state.ui.ptView='list';vPt();state.ui.ptView='grid'}
-  return v;
+  return{v,n:day.sessions.length,un:unassignedList(day).reduce((a,u)=>a+u.miss,0)};
 }
 function runFuzz(N,onProgress,onDone){
   const backup=JSON.stringify(state),realSave=save;save=()=>{};
-  let i=0,fail=[],t0=performance.now();
+  let i=0,fail=[],t0=performance.now();FZ.res={};FZ.N=N;
   const step=()=>{
     const end=Math.min(N,i+50);
-    for(;i<end;i++){try{const v=fuzzOne(i+1);if(v.length)fail.push({seed:i+1,msg:v.slice(0,3).join(' / ')})}catch(e){fail.push({seed:i+1,msg:'例外: '+e.message})}}
+    for(;i<end;i++){try{const o=fuzzOne(i+1);FZ.res[i+1]={ok:!o.v.length,n:o.n,un:o.un,msg:o.v.slice(0,3).join(' / ')};if(o.v.length)fail.push({seed:i+1,msg:FZ.res[i+1].msg})}catch(e){FZ.res[i+1]={ok:false,n:0,msg:'例外: '+e.message};fail.push({seed:i+1,msg:'例外: '+e.message})}}
     onProgress(i,fail.length);
     if(i<N)setTimeout(step,0);
     else{state=JSON.parse(backup);save=realSave;effCache.clear();rebuildMaps();onDone(fail,(performance.now()-t0)/1000)}
   };step();
 }
 
+/* ================= イレギュラー一覧 ================= */
+// [分類, イレギュラー, アプリでの対応, 対応のしかた]
+// 対応のしかた：自動＝何もしなくてもアプリが処理／設定＝マスタ・設定に入力／臨時ルール＝イレギュラー対応タブで登録／操作＝画面で手直し／検出＝データチェックで見つけて知らせる（多くは自動修正）
+const IRR=[
+['療法士の勤務','当日の急な欠勤','作成・結果タブの出勤チップをクリックして休みにし、作成（またはこの日だけ作り直す）','操作'],
+['療法士の勤務','日付を決めた休暇（年休・研修出張）','療法士マスタの「休暇日」に日付を入力','設定'],
+['療法士の勤務','長期の休み（病休・産休・育休）','臨時ルール：療法士×休み（開始日〜終了日）','臨時ルール'],
+['療法士の勤務','曜日で決まった休み（週休）','療法士マスタの「休日曜日」','設定'],
+['療法士の勤務','人によって休みの曜日が違うシフト','療法士ごとの「休日曜日」','設定'],
+['療法士の勤務','遅刻','臨時ルール：療法士×時間を変更（例 10:00-17:30）','臨時ルール'],
+['療法士の勤務','早退','臨時ルール：療法士×時間を変更（例 08:30-15:00）','臨時ルール'],
+['療法士の勤務','時間休・中抜け','臨時ルール：療法士×NG時間を追加','臨時ルール'],
+['療法士の勤務','短時間勤務（時短）','療法士マスタの開始・終了時刻','設定'],
+['療法士の勤務','午前だけ・午後だけの勤務','療法士マスタの開始・終了時刻、または臨時ルール','設定'],
+['療法士の勤務','毎週決まった会議・カンファレンス','療法士マスタの「NG時間」、または臨時ルール（曜日指定）','設定'],
+['療法士の勤務','臨時の会議・研修・委員会','臨時ルール：療法士×NG時間を追加','臨時ルール'],
+['療法士の勤務','特定の曜日だけ勤務時間が違う','臨時ルール：療法士×時間を変更＋曜日指定','臨時ルール'],
+['療法士の勤務','職種全体の勉強会・ミーティング','臨時ルール：職種×NG時間を追加','臨時ルール'],
+['療法士の勤務','職種全員が欠ける時間帯','臨時ルール：職種×NG時間、または職種×休み','臨時ルール'],
+['療法士の勤務','他部署への応援・兼務で担当を減らす','臨時ルール：療法士×上限単位を変更','臨時ルール'],
+['療法士の勤務','新人など1日の担当単位を少なくしたい','療法士マスタの「1日上限」','設定'],
+['療法士の勤務','1日の上限単位（24単位など）','設定「療法士1日上限単位」','設定'],
+['療法士の勤務','週の上限単位（108単位など）','設定「療法士 週上限単位」。複数日作成時は週の累計で判定','自動'],
+['療法士の勤務','入職・退職・異動','療法士マスタで追加・削除、またはCSVで更新','設定'],
+['療法士の勤務','療法士IDの変更','IDを書き換えると患者の担当も自動で付け替え','自動'],
+['療法士の勤務','パターンごとに休みの人を覚えておきたい','パターン保存時に「休み・休止状態も記憶」','設定'],
+['担当・割当','担当療法士が休みの日','同じ職種の出勤者に自動で振り分け（担当外は * 表示）','自動'],
+['担当・割当','担当がいない患者','同じ職種で負担の少ない人へ自動割当','自動'],
+['担当・割当','担当を必ず守りたい','設定「担当療法士：担当のみ」','設定'],
+['担当・割当','担当を気にせず空いている人で回したい','設定「担当療法士：考慮しない」','設定'],
+['担当・割当','担当の一時的な交代','臨時ルール：患者×担当を変更','臨時ルール'],
+['担当・割当','担当の恒久的な交代','患者マスタの担当PT/OT/ST','設定'],
+['担当・割当','療法士ごとの負担の偏り','設定「負荷平準化」で受け持ち単位をならす','自動'],
+['担当・割当','その職種の出勤者が0人','その職種の分は未割当（理由：出勤している○○がいない）として表示','自動'],
+['担当・割当','療法士が1人もいない','エラーにならず全員未割当として表示','自動'],
+['患者の在院','新規入院','患者マスタで追加、またはCSV（IDで更新・追加）','設定'],
+['患者の在院','退院','患者マスタで削除、または休止','設定'],
+['患者の在院','退院日・転院日・転棟日の当日','臨時ルール：患者×休み・休止','臨時ルール'],
+['患者の在院','外出・外泊','臨時ルール：患者×休み・休止（期間）','臨時ルール'],
+['患者の在院','発熱・体調不良で当日中止','患者マスタの「休止」、または臨時ルール','設定'],
+['患者の在院','手術・転科などで長期休止','患者マスタの「休止」','設定'],
+['患者の在院','日付を決めた休止','患者マスタの「休止日」','設定'],
+['患者の在院','リハを行う曜日が決まっている（平日のみ等）','患者マスタの「実施曜日」','設定'],
+['患者の在院','患者が0人','エラーにならず空の予定表を表示','自動'],
+['患者の時間','毎日決まった入浴時間','患者マスタの「NG時間」','設定'],
+['患者の時間','透析（半日つぶれる）','患者マスタの「NG時間」（例 09:00-13:00）','設定'],
+['患者の時間','臨時の検査・受診・画像検査','臨時ルール：患者×NG時間を追加','臨時ルール'],
+['患者の時間','食事・服薬・処置の時間','患者マスタの「NG時間」、または全体の休憩帯','設定'],
+['患者の時間','その日は午前だけ・午後だけ可能','臨時ルール：患者×時間を変更','臨時ルール'],
+['患者の時間','いつも午前がよい・午後がよい','患者マスタの「希望時間帯」（できる範囲で優先）','設定'],
+['患者の時間','希望時間帯の一時変更','臨時ルール：患者×希望時間帯','臨時ルール'],
+['患者の時間','家族見学・装具採型・外来同行など時刻が決まっている','臨時ルール：患者×時刻指定（職種・単位数）','臨時ルール'],
+['患者の時間','時刻だけでなく療法士も決まっている','臨時ルール：時刻指定の「療法士」欄に入力','臨時ルール'],
+['患者の時間','時刻指定が他の予定とぶつかる','入れられなかった分を未割当タブ「時刻指定が守れなかったもの」に理由付きで表示','自動'],
+['患者の時間','時刻指定が訓練時間の外・刻みに合わない','同上（理由：訓練時間の枠外・刻みに合わない）','自動'],
+['患者の時間','NG時間が一日中で入れようがない','データチェックで警告','検出'],
+['患者の単位','体調不良で単位を減らす','臨時ルール：患者×単位数を変更（-1 など）','臨時ルール'],
+['患者の単位','集中的に単位を増やす','臨時ルール：患者×単位数を変更（+1 など）','臨時ルール'],
+['患者の単位','単位数の恒久的な変更','患者マスタのPT/OT/ST単位','設定'],
+['患者の単位','途中からSTが始まる・OTが終了する','患者マスタの該当職種の単位を変更','設定'],
+['患者の単位','疲れやすく1日の合計を抑えたい','臨時ルール：患者×上限単位を変更','臨時ルール'],
+['患者の単位','合計単位が患者上限（6・9単位）を超える','多い職種から自動で減らす','自動'],
+['患者の単位','職種の単位をまとめて実施したい（40分連続など）','設定「同職種の単位を連続でまとめる」「1回の最大連続単位」','設定'],
+['患者の単位','まとめて入らないときは分けてでも入れたい','設定「1単位ずつ分割」','設定'],
+['患者の単位','PT→OTと続けて疲れる','設定「患者の連続訓練上限」','設定'],
+['患者の単位','職種間に休憩をはさみたい','設定「別職種の訓練間の最小間隔」','設定'],
+['患者の単位','重症・回復期など優先したい患者','患者マスタの「優先度」','設定'],
+['患者の単位','優先度の一時変更','臨時ルール：患者×優先度','臨時ルール'],
+['患者の単位','同じ患者に同時刻の予定が重なる','自動で重ならないように作成（手直し時も重複は不可）','自動'],
+['病棟・全体','病棟の入浴日・回診・行事','臨時ルール：病棟×NG時間（曜日指定も可）','臨時ルール'],
+['病棟・全体','感染症などで病棟閉鎖','臨時ルール：病棟×休み・休止（期間）','臨時ルール'],
+['病棟・全体','病棟全体で単位を減らす','臨時ルール：病棟×単位数を変更','臨時ルール'],
+['病棟・全体','全体行事・避難訓練・停電・システム停止','臨時ルール：全体×NG時間を追加','臨時ルール'],
+['病棟・全体','年末・行事日などで訓練時間を短縮','臨時ルール：全体×時間を変更、またはパターン','臨時ルール'],
+['病棟・全体','昼休憩の時間変更・休憩帯の追加','設定「全体の休憩・訓練不可時間帯」','設定'],
+['病棟・全体','全体の患者上限を一時的に変更','臨時ルール：全体×上限単位を変更','臨時ルール'],
+['病棟・全体','職種全員の単位を一律に減らす','臨時ルール：職種×単位数を変更','臨時ルール'],
+['病棟・全体','祝日','作成・結果タブの「祝日・特別日」に日付を入れてパターンを割り当て','設定'],
+['病棟・全体','土曜・日曜の少人数体制','曜日ごとのパターン（土曜（短縮）・日祝（最小体制））','設定'],
+['病棟・全体','年末年始・連休','祝日欄に日付を並べる、または期間の臨時ルール','設定'],
+['病棟・全体','土日は1職種2単位まで等の一律制限','設定・パターン「1職種あたり単位上限」','設定'],
+['病棟・全体','少人数の日は優先度の高い患者だけ実施','設定・パターン「対象とする患者」','設定'],
+['病棟・全体','午前だけ実施する日','パターン「午前のみ」','設定'],
+['病棟・全体','人手が足りず全員分入らない','パターン「人員不足（均等配分）」で全員に最低単位を保証','設定'],
+['病棟・全体','必要単位が提供できる単位を超えている','作成前に需給バランスで職種ごとの不足を表示','自動'],
+['病棟・全体','新しい体制を作って使い回したい','パターンの新規保存・上書き・名前変更','設定'],
+['時間・刻み','1単位が20分ではない','設定「1単位の分数」','設定'],
+['時間・刻み','5分・10分単位で時刻をずらしたい','設定「予定表・手動調整の時間刻み」＋予定クリックで「5分早く／遅く」','操作'],
+['時間・刻み','NG時間の前後にも詰めて入れたい','設定「自動作成の開始時刻の刻み」を5分に','設定'],
+['時間・刻み','勤務時間が訓練時間からはみ出す','訓練時間内だけを使って自動作成','自動'],
+['時間・刻み','訓練時間の設定が変わった後の古い予定','作成した日ごとの設定を保存して表示がずれない','自動'],
+['手直し','予定を別の療法士・時刻へ移す','療法士別予定表でドラッグ、またはクリックして変更','操作'],
+['手直し','患者の予定の時刻だけ変える','患者別時間割で上下にドラッグ（療法士はそのまま）','操作'],
+['手直し','手で決めた予定を残したまま作り直す','🔒固定してから作成・作り直し','操作'],
+['手直し','固定した予定が新しい条件に合わなくなった','その予定を外して件数を知らせる','自動'],
+['手直し','予定を外す','予定を未割当欄へドラッグ、またはクリックして「外す」','操作'],
+['手直し','空いた枠に未割当を後から入れる','「未割当を空きに自動で入れる」、またはドラッグ','操作'],
+['手直し','未割当を患者の空き時間に入れたい','患者別時間割へドラッグすると空いている療法士を自動で選ぶ','操作'],
+['手直し','手で重なる場所へ動かそうとした','配置できない旨を表示して止める','自動'],
+['手直し','手で勤務時間外・NG時間・別職種へ入れようとした','確認を出し、了承すれば配置','自動'],
+['手直し','単位数を手で変える','予定をクリックして単位数を変更','操作'],
+['手直し','手直し後に問題がないか確認したい','イレギュラー対応タブ「作成済み予定の検証」','自動'],
+['入力ミス','IDの重複','データチェックで検出、自動修正で連番を付けて解消（重複分は計算から除外）','検出'],
+['入力ミス','IDが空欄','データチェックで検出、自動修正でIDを付与','検出'],
+['入力ミス','勤務時間の開始と終了が逆','データチェックで検出、自動修正で空欄（訓練時間全体）に','検出'],
+['入力ミス','勤務時間が訓練時間と重ならない','データチェックで警告','検出'],
+['入力ミス','時刻が全角（０９：００）','自動で半角として読む','自動'],
+['入力ミス','時刻の区切りが「〜」「～」「－」','自動で読み替え','自動'],
+['入力ミス','NG時間の区切りが「、」「；」や空白','自動で読み替え','自動'],
+['入力ミス','読めない時刻・NG時間（10:00-1100 等）','データチェックで検出、自動修正で読める部分だけ残す','検出'],
+['入力ミス','日付の書き方の違い（2026/1/5 等）','自動で読み替え','自動'],
+['入力ミス','存在しない日付（2026/13/40 等）','データチェックで検出、自動修正で削除','検出'],
+['入力ミス','曜日欄に曜日以外の文字','データチェックで検出、自動修正で除去','検出'],
+['入力ミス','単位数が数字でない・負の数・小数','データチェックで検出、0以上の整数に自動修正','検出'],
+['入力ミス','単位数が全角数字','自動で数字として読む','自動'],
+['入力ミス','優先度が1〜3以外','データチェックで検出、自動修正','検出'],
+['入力ミス','希望時間帯が AM/PM など','データチェックで検出、午前・午後に自動修正','検出'],
+['入力ミス','職種が小文字（pt）','データチェックで検出、自動修正で大文字に','検出'],
+['入力ミス','職種がPT/OT/ST以外','データチェックで警告（その療法士は予定に入らない）','検出'],
+['入力ミス','1日上限が数字でない','データチェックで検出、自動修正で空欄（既定値）に','検出'],
+['入力ミス','担当が名簿にいない','データチェックで検出、氏名で一致すればIDへ自動修正','検出'],
+['入力ミス','担当が別職種の療法士','データチェックで検出、自動作成でもその人には割り当てない','検出'],
+['入力ミス','設定の訓練時間が逆・空欄','データチェックで検出、自動修正で 9:00〜17:00','検出'],
+['入力ミス','1単位の分数がありえない値','既定の20分で動作、データチェックで検出','検出'],
+['入力ミス','時間刻みが1単位を割り切れない','1単位刻みで動作、データチェックで検出','検出'],
+['入力ミス','休憩帯に読めない文字','データチェックで検出、自動修正','検出'],
+['入力ミス','作成の開始日が不正','作成前に止めて知らせる','検出'],
+['CSV取込','ExcelのShift_JIS形式のCSV','自動で文字コードを判定','自動'],
+['CSV取込','BOM付き・改行コード混在・引用符付き','自動で処理','自動'],
+['CSV取込','見出しが日本語でなく英語キー','どちらでも読み込み','自動'],
+['CSV取込','担当を氏名で書いたCSV','療法士名簿の氏名からIDに変換','自動'],
+['CSV取込','一部の患者だけ更新したい','「IDで更新・追加」取り込み','設定'],
+['臨時ルール','対象のIDが存在しない','データチェックで警告','検出'],
+['臨時ルール','時間・値・日付の書き方が違う','データチェックで警告','検出'],
+['臨時ルール','終了日が開始日より前','データチェックで警告','検出'],
+['臨時ルール','時刻指定・担当変更に必要な項目が足りない','データチェックで警告','検出'],
+['臨時ルール','同じ日に複数のルールが重なる','上から順にすべて反映','自動'],
+['臨時ルール','ルールを消さずに一時的に止めたい','「有効」チェックを外す','操作'],
+['臨時ルール','終わったルールがたまる','「期限切れのルールを削除」','操作'],
+['臨時ルール','その日にどのルールが効くか確かめたい','日付を選んで「効くルール」を表示（作成・結果タブにも表示）','自動'],
+['保存・移行','ブラウザの保存容量が足りない','保存失敗を知らせ、JSON保存を案内','検出'],
+['保存・移行','別のPCで使う・PCの入れ替え','JSONで全データを保存して復元','操作'],
+['保存・移行','間違えて消した・上書きした','JSONバックアップから復元','操作'],
+['保存・移行','パターンを間違えて消した','「標準パターンを復元」','操作'],
+];
+const FZ={res:{},N:0};
+function scenarioInfo(seed){ // 呼び出し側で state を退避すること
+  const sc=fuzzScenario(seed);
+  state.settings=sc.S;state.therapists=sc.ths;state.patients=sc.pts;state.rules=sc.rules;effCache.clear();
+  const agg={};dataIssues().forEach(x=>{if(x.lv==='info'||/作成の開始日/.test(x.msg))return;
+    const rule=/^臨時ルール/.test(x.msg);let k=rule?'臨時ルールの'+x.msg.slice(x.msg.lastIndexOf('：')+1):(x.msg.includes('：')?x.msg.slice(x.msg.indexOf('：')+1):x.msg);
+    k=k.replace(/「[^」]*」/g,'').replace(/IDの重複 [^（]*/,'IDの重複').replace(/ ?\d+件/,'').replace(/（[^）]*）/g,'').replace(/を -?\d+ として扱います/,'が不正').replace(/\s+/g,'').slice(0,30);agg[k]=(agg[k]||0)+1});
+  const S=sc.S,f=[];
+  if(!sc.ths.length)f.push('療法士0人');if(!sc.pts.length)f.push('患者0人');
+  if(sc.absent)f.push('急な欠勤1名');if(sc.paused)f.push('急な休止1名');if(sc.doLock)f.push('固定予定を残して作り直し');
+  const wl=Object.values(sc.wl).filter(v=>v>=80).length;if(wl)f.push(`週上限に近い療法士${wl}名`);
+  if(String(S.unit)!=='20')f.push(`1単位${S.unit}分`);if(String(S.step)!=='5')f.push(`刻み${S.step}分`);if(+S.genStep)f.push(`開始刻み${S.genStep}分`);
+  if(S.start!=='09:00'||S.end!=='17:00')f.push(`訓練${S.start||'空欄'}〜${S.end||'空欄'}`);if(S.breaks!=='12:00-13:00')f.push(`休憩「${S.breaks||'なし'}」`);
+  if(S.strategy==='equal')f.push('均等配分');if(S.tanto!=='prefer')f.push(S.tanto==='strict'?'担当のみ':'担当を考慮しない');
+  if(+S.cap)f.push(`1職種${S.cap}単位まで`);if(S.minPriority!=='3')f.push(`優先度${S.minPriority}以上のみ`);if(+S.minGap)f.push(`訓練間隔${S.minGap}`);
+  if(+S.maxConsec&&+S.maxConsec<6)f.push(`連続上限${S.maxConsec}`);if(String(S.ptMax)!=='9')f.push(`患者上限${S.ptMax}`);if(String(S.thMax)!=='21')f.push(`療法士上限${S.thMax||'なし'}`);
+  if(String(S.thWeekMax)!=='108')f.push(`週上限${S.thWeekMax}`);if(!S.continuous)f.push('連続でまとめない');if(!S.allowSplit)f.push('分割しない');
+  const act=rulesFor(sc.date);
+  return{seed,date:sc.date,size:`患者${sc.pts.length}・療法士${sc.ths.length}`,dirty:Object.entries(agg).map(([k,v])=>`${k}×${v}`),feat:f,rules:act.map(describeRule),rulesOff:sc.rules.length-act.length};
+}
+function withScratch(fn){const b=JSON.stringify(state),sv=save;save=()=>{};try{return fn()}finally{state=JSON.parse(b);save=sv;effCache.clear();rebuildMaps()}}
+function vCat(){
+  const q=state.ui.catQ.trim(),c=state.ui.catC;
+  const cats=[...new Set(IRR.map(x=>x[0]))];
+  const lv={};IRR.forEach(x=>lv[x[3]]=(lv[x[3]]||0)+1);
+  const rows=IRR.map((x,i)=>[i+1,...x]).filter(x=>(!c||x[1]===c)&&(!q||x.join(' ').includes(q)));
+  // 自動生成テスト
+  const N=FZ.N||10000,per=100,pages=Math.ceil(N/per),pg=Math.min(Math.max(1,+state.ui.fzPage||1),pages);
+  const ran=Object.keys(FZ.res).length,nf=Object.values(FZ.res).filter(r=>!r.ok).length;
+  const seeds=[];for(let i=(pg-1)*per+1;i<=Math.min(N,pg*per);i++)seeds.push(i);
+  const infos=withScratch(()=>seeds.map(scenarioInfo));
+  const frows=infos.map(o=>{const r=FZ.res[o.seed];return`<tr><td class="num">${o.seed}</td><td>${mdw(o.date)}</td><td>${o.size}</td>
+    <td class="small">${o.dirty.length?o.dirty.map(esc).join('<br>'):'<span class="muted">なし</span>'}</td><td class="small">${o.feat.map(esc).join('、')||'<span class="muted">標準</span>'}</td>
+    <td class="small">${o.rules.map(esc).join('<br>')||'<span class="muted">なし</span>'}${o.rulesOff?`<br><span class="muted">（その日に効かないルール${o.rulesOff}件）</span>`:''}</td>
+    <td>${r?(r.ok?`<span class="ok">合格</span><br><span class="small muted">予定${r.n}件 未割当${r.un}単位</span>`:`<span class="ng">不合格</span><br><span class="small">${esc(r.msg)}</span>`):'<span class="muted">未実行</span>'}</td></tr>`}).join('');
+  return`<div class="card"><h2>設計して対応したイレギュラー：${IRR.length}種類</h2>
+  <p>1万種類は考えられていません。<b>実際に考えて対応したのは ${IRR.length} 種類</b>です（下の表がすべてです）。<br>
+  「1万件」は、この${IRR.length}種類と入力ミスを自動でランダムに組み合わせたテストの件数です（下の「自動生成テスト」でも全件を表示しています）。</p>
+  <p class="small">対応のしかた：${Object.entries(lv).map(([k,v])=>`<b>${k}</b> ${v}`).join('　')}
+  <br><span class="muted">自動＝何もしなくてもアプリが処理／設定＝マスタ・設定に入力／臨時ルール＝イレギュラー対応タブで登録／操作＝画面で手直し／検出＝データチェックで見つけて知らせる（多くは自動修正）</span></p>
+  <div class="row noprint"><label class="f">分類<select data-ui="catC"><option value="">すべて（${IRR.length}）</option>${cats.map(x=>`<option ${x===c?'selected':''} value="${esc(x)}">${esc(x)}（${IRR.filter(y=>y[0]===x).length}）</option>`).join('')}</select></label>
+  <label class="f">検索<input data-ui="catQ" value="${esc(q)}" placeholder="例：欠勤、透析"></label><button class="b" data-act="catCsv">CSVで保存</button><button class="b" data-act="print">印刷</button><span class="muted small">${rows.length}件表示</span></div>
+  <div class="scroll" style="margin-top:8px"><table class="t"><thead><tr><th class="num">No</th><th>分類</th><th>イレギュラー</th><th>アプリでの対応</th><th>対応のしかた</th></tr></thead>
+  <tbody>${rows.map(x=>`<tr><td class="num">${x[0]}</td><td>${esc(x[1])}</td><td>${esc(x[2])}</td><td>${esc(x[3])}</td><td>${esc(x[4])}</td></tr>`).join('')}</tbody></table></div></div>
+
+  <div class="card"><h2>自動生成テストの全${N.toLocaleString()}件</h2>
+  <p class="help">上のイレギュラーと入力ミスをランダムに組み合わせて自動で作った場面です。番号が同じなら毎回同じ内容になります。
+  ${ran?`<b>${ran.toLocaleString()}件実行済み：合格 ${(ran-nf).toLocaleString()}件・不合格 ${nf}件</b>`:'結果欄は「イレギュラー対応」タブの自己テストを実行すると表示されます。'}</p>
+  <div class="row noprint"><button class="b" data-act="fzPage" data-v="1">≪</button><button class="b" data-act="fzPage" data-v="${pg-1}">＜ 前</button>
+  <span>${(pg-1)*per+1}〜${Math.min(N,pg*per)}件目（${pg}/${pages}ページ）</span><button class="b" data-act="fzPage" data-v="${pg+1}">次 ＞</button><button class="b" data-act="fzPage" data-v="${pages}">≫</button>
+  <label class="f">番号へ移動<input type="number" min="1" max="${N}" id="fzGo" style="width:90px"></label><button class="b" data-act="fzGo">移動</button>
+  <button class="b" data-act="fzCsv">全${N.toLocaleString()}件をCSVで保存</button></div>
+  <div class="scroll" style="margin-top:8px"><table class="t"><thead><tr><th class="num">No</th><th>日付</th><th>規模</th><th>入力ミス（種類×件数）</th><th>設定・状況の特徴</th><th>その日に効く臨時ルール</th><th>結果</th></tr></thead><tbody>${frows}</tbody></table></div></div>`;
+}
 /* ---- マスタ ---- */
 const PCOLS=[['id','ID',70],['name','氏名',110],['ward','病棟',50],['room','部屋',55],['pt','PT単位',50,'n'],['ot','OT単位',50,'n'],['st','ST単位',50,'n'],['tPT','担当PT',72,'th'],['tOT','担当OT',72,'th'],['tST','担当ST',72,'th'],['days','実施曜日',120],['ng','NG時間',140],['prefer','希望時間帯',70,['','午前','午後']],['priority','優先度',55,['1','2','3']],['paused','休止',40,'c'],['offDates','休止日',110],['note','備考',100]];
 const TCOLS=[['id','ID',60],['name','氏名',110],['disc','職種',60,DISC],['start','開始',75,'time'],['end','終了',75,'time'],['offDays','休日曜日',70],['offDates','休暇日',150],['ng','NG時間(会議等)',150],['max','1日上限',60,'n'],['absent','休み',40,'c'],['note','備考',120]];
@@ -1158,6 +1357,12 @@ function sesDialog(sid){
 /* ================= イベント ================= */
 const ACT={
   goGen(){state.ui.tab='gen';render()},
+  catCsv(){download('イレギュラー一覧.csv',toCSV([['No','分類','イレギュラー','アプリでの対応','対応のしかた'],...IRR.map((x,i)=>[i+1,...x])]))},
+  fzPage(el){state.ui.fzPage=+el.dataset.v;render()},
+  fzGo(){const v=+$('#fzGo').value;if(v>0){state.ui.fzPage=Math.ceil(v/100);render()}},
+  fzCsv(){const N=FZ.N||10000;busy(true);setTimeout(()=>{try{const rows=[['No','日付','規模','入力ミス','設定・状況の特徴','臨時ルール（その日に効くもの）','効かないルール数','結果','予定件数','未割当単位','不合格の内容']];
+    withScratch(()=>{for(let i=1;i<=N;i++){const o=scenarioInfo(i),r=FZ.res[i];rows.push([i,o.date,o.size,o.dirty.join(' / '),o.feat.join('、'),o.rules.join(' / '),o.rulesOff,r?(r.ok?'合格':'不合格'):'未実行',r?r.n:'',r?r.un:'',r?r.msg:''])}});
+    download(`自動生成テスト${N}件.csv`,toCSV(rows))}finally{busy(false)}},30)},
   goIrr(el,e){e.preventDefault();state.ui.tab='irr';render()},
   addRule(el){const i=+el.dataset.i;const base={on:true,from:state.gen.start,to:'',wd:'',target:'pt',key:'',action:'ng',disc:'',time:'',value:'',th:'',note:''};
     const t=i>=0?TEMPL[i]:null;state.rules.push({...base,...(t?t[1]:{}),note:t?t[0]:''});save();render();toast('追加しました。対象ID等を入力してください')},
