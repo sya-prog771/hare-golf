@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gait Tester 手動版</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b7a63">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+/* 手動デジタイズ版：AI版と同じ角度の定義・判定幅で、関節点を自分でタップして計測する */
+:root{
+  --bg:#f4f6f5;--surface:#ffffff;--fg:#17201d;--muted:#5d6b66;--line:#dbe2df;--soft:#eaf1ee;
+  --accent:#0b7a63;--accent-fg:#ffffff;--warn:#a15c00;--warn-bg:#fff3df;--bad:#b42318;
+  --c-trunk:#8b5cf6;--c-hip:#e0483d;--c-knee:#1f8fd6;--c-ankle:#1c9b4e;--c-R:#e0483d;--c-L:#1f8fd6;
+  --font:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{--bg:#111614;--surface:#1a211e;--fg:#e4ebe8;--muted:#98a6a0;--line:#2c3632;--soft:#20302a;--accent:#3cc9a5;--accent-fg:#06231b;--warn:#f0b452;--warn-bg:#352812;--bad:#f2786e;--c-trunk:#b39dff;--c-hip:#ff7b70;--c-knee:#5ab8f5;--c-ankle:#4fd17f;--c-R:#ff7b70;--c-L:#5ab8f5;color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.55;
+  padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:12px;padding-block:14px}
+header h1{font-size:20px;margin:0;letter-spacing:.02em}
+header p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h2{font-size:15px;margin:0;display:flex;align-items:center;gap:8px}
+.num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-fg);font-size:12px;font-weight:700;flex:none}
+button,.btn{font:inherit;font-size:15px;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;-webkit-tap-highlight-color:transparent;position:relative;overflow:hidden}
+button:focus-visible,.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+button.small,.btn.small{min-height:36px;padding:0 10px;font-size:14px}
+.vh{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted);min-width:0}
+select,input[type=number],input[type=text],input[type=date]{font:inherit;font-size:16px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:40px;padding:0 8px;width:100%}
+select.small{width:auto;min-height:36px;font-size:14px}
+textarea{width:100%;font:inherit;font-size:15px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);padding:6px 8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pinfo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pinfo .wide{grid-column:1/-1}
+@media(min-width:560px){.pinfo{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.slot{flex-direction:column;gap:0;padding:6px 4px;min-height:56px;line-height:1.3;font-size:14px;font-weight:600}
+.slot small{font-weight:400;font-size:11px;color:var(--muted)}
+.slot.on{border-color:var(--accent);background:var(--soft)}
+.slot .st{font-size:11px;font-weight:600}
+.st.done{color:var(--accent)}
+.viewer{position:relative;background:#000;border-radius:10px;overflow:hidden}
+.viewer canvas#view{display:block;width:100%;height:auto}
+.viewer canvas#view.tap{cursor:crosshair;touch-action:none}
+.viewer .empty{color:#b9c4c0;text-align:center;padding:48px 16px;font-size:14px}
+.badge{position:absolute;left:8px;top:8px;width:max-content;max-width:calc(100% - 16px);background:rgba(0,0,0,.66);color:#fff;font-size:12px;padding:3px 8px;border-radius:6px;font-variant-numeric:tabular-nums;pointer-events:none}
+#loupe{position:absolute;top:8px;width:150px;height:150px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.5);pointer-events:none;background:#000}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.muted{color:var(--muted);font-size:13px}
+.warn{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:13px}
+.err{color:var(--bad);font-size:14px}
+.tablewrap{overflow-x:auto;margin:0 -2px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12px}
+td small{color:var(--muted)}
+table.wrapc td,table.wrapc th{white-space:normal}
+.jdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.evbtns{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.evbtns.two{grid-template-columns:repeat(2,1fr)}
+.evbtns button{flex-direction:column;gap:0;line-height:1.3;padding:6px 4px;min-height:54px;font-weight:600}
+.evbtns button small{font-weight:400;font-size:11px;color:var(--muted)}
+.dig{border:2px solid var(--accent);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--soft)}
+.dig .next{font-size:15px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:0 11px;min-height:32px;background:var(--surface);color:var(--fg);cursor:pointer}
+.chip.ok{border-color:var(--accent);color:var(--accent);font-weight:600}
+.chip.now{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.chip.skip{text-decoration:line-through;color:var(--muted)}
+.rec{border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;gap:10px;align-items:flex-start}
+.rec.off{opacity:.5}
+.rec img{width:66px;height:88px;object-fit:cover;border-radius:6px;background:#000;flex:none}
+.rec .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;font-size:13px;font-variant-numeric:tabular-nums}
+.rec .body b{font-size:14px}
+.rec label{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.rec input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.pat{border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+.pat small{color:var(--muted)}
+.pat .src{font-size:11px;color:var(--muted);font-weight:600}
+.diff{color:var(--warn);font-weight:600}
+.banner{background:var(--soft);border:1px solid var(--accent);border-radius:10px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+.banner span{flex:1 1 220px}
+details summary{cursor:pointer;color:var(--muted);font-size:14px;min-height:32px;display:flex;align-items:center}
+.help{font-size:13.5px;line-height:1.7}
+.help ul{padding-left:18px;margin:6px 0}
+#printArea{display:none}
+@media print{
+  :root{--bg:#fff;--surface:#fff;--fg:#000;--muted:#555;--line:#c8c8c8;--soft:#eef5f2;--accent:#0b7a63;--warn:#8a4b00;--warn-bg:#fff3df;--bad:#b42318;color-scheme:light}
+  @page{size:A4;margin:12mm}
+  body{background:#fff;color:#000;padding:0;font-size:10.5pt}
+  .wrap,#vid{display:none!important}
+  #printArea{display:block!important}
+  #printArea h1{font-size:17pt;margin:0 0 2px}
+  #printArea h2{font-size:12.5pt;margin:14px 0 6px;border-bottom:1.5px solid #0b7a63;padding-bottom:2px;display:block}
+  #printArea table{font-size:9.5pt;break-inside:avoid}
+  #printArea th,#printArea td{padding:3px 5px}
+  #printArea .pat,#printArea figure{break-inside:avoid}
+  #printArea .pat{margin-bottom:5px}
+  #printArea .snaps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  #printArea .snaps figure{margin:0;font-size:8.5pt;text-align:center}
+  #printArea .snaps img{width:100%}
+  #printArea .tablewrap{overflow:visible}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Gait Tester <small style="font-size:14px;color:var(--muted)">手動デジタイズ版</small></h1>
+    <div class="row" style="margin-top:6px"><a class="small" href="./" style="color:var(--accent)">← AI版に戻る</a></div>
+    <p>動画を止めて、関節の位置を自分でタップして角度を計測します。AI版と同じ角度の定義・判定幅を使います。動画は端末の外に送信されません。</p>
+  </header>
+
+  <div class="banner" id="restoreBar" hidden>
+    <span id="restoreTxt"></span>
+    <button class="small primary" id="bRestore">復元する</button>
+    <button class="small" id="bDiscard">破棄</button>
+  </div>
+
+  <section class="card">
+    <h2>対象者・検査情報<small class="muted" style="font-weight:400">（任意・レポートに記載）</small></h2>
+    <div class="pinfo">
+      <label class="f">ID<input type="text" id="p_pid" autocomplete="off"></label>
+      <label class="f">氏名<input type="text" id="p_pname" autocomplete="off"></label>
+      <label class="f">検査日<input type="date" id="p_exdate"></label>
+      <label class="f">年齢<input type="number" id="p_age" min="0" max="120" inputmode="numeric"></label>
+      <label class="f">性別<select id="p_sex"><option value=""></option><option>男性</option><option>女性</option><option>その他</option></select></label>
+      <label class="f">身長（cm）<input type="number" id="p_height" min="50" max="250" step="0.1" inputmode="decimal"></label>
+      <label class="f">診断名・障害名<input type="text" id="p_diag" autocomplete="off"></label>
+      <label class="f">補助具・装具<input type="text" id="p_aid" autocomplete="off" placeholder="なし・T字杖・AFO など"></label>
+      <label class="f">検査者<input type="text" id="p_examiner" autocomplete="off"></label>
+      <label class="f wide">メモ<textarea id="p_memo" style="height:64px"></textarea></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">1</span>撮影方向を選んで動画を入れる</h2>
+    <div class="slots" id="slots"></div>
+    <div class="muted" id="slotHint"></div>
+    <div class="row">
+      <label class="btn primary">動画を選択<input id="file" type="file" accept="video/*" class="vh"></label>
+      <label class="btn">カメラで撮影<input id="cap" type="file" accept="video/*" capture="environment" class="vh"></label>
+      <button id="bClear" hidden>この枠を空にする</button>
+    </div>
+    <span id="fname" class="muted"></span>
+    <div class="viewer" id="viewerBox">
+      <div class="empty" id="empty">この枠にはまだ動画がありません</div>
+      <canvas id="view" hidden></canvas>
+      <canvas id="loupe" hidden></canvas>
+      <div class="badge" id="badge" hidden></div>
+    </div>
+    <input id="scrub" type="range" min="0" max="0" value="0" disabled aria-label="フレーム位置">
+    <div class="row">
+      <button class="small" id="bPrev5" disabled>◀◀ 5</button>
+      <button class="small" id="bPrev" disabled>◀ 1</button>
+      <button class="small" id="bPlay" disabled>▶ 再生</button>
+      <select class="small" id="rate" aria-label="再生速度"><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="1" selected>×1</option></select>
+      <button class="small" id="bNext" disabled>1 ▶</button>
+      <button class="small" id="bNext5" disabled>5 ▶▶</button>
+    </div>
+    <div class="grid2">
+      <label class="f">撮影フレームレート
+        <select id="capFps"><option value="30">30 fps</option><option value="60">60 fps</option><option value="120">120 fps（スロー）</option><option value="240">240 fps（スロー）</option></select>
+      </label>
+      <label class="f">動画ファイルのfps<input id="fileFps" type="number" min="1" step="0.01" value="30"></label>
+      <label class="f" id="dirWrap">進行方向<select id="dir"><option value="auto">自動（踵→つま先の向き）</option><option value="1">画面の左→右</option><option value="-1">画面の右→左</option></select></label>
+    </div>
+    <p class="muted" style="margin:0">スロー動画は「撮影フレームレート」に実際の撮影fpsを選び、ファイルのfpsは通常30のままにします。</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">2</span>場面を選んで関節をタップ</h2>
+    <p class="muted" style="margin:0" id="evHint"></p>
+    <div class="evbtns" id="evbtns"></div>
+    <div class="dig" id="digPanel" hidden>
+      <div class="next" id="digNext"></div>
+      <div class="chips" id="digChips"></div>
+      <div class="muted">指を置くと拡大鏡が出ます。指を動かして位置を合わせ、離すと決まります。置いた点を直すときは、下の名前をタップしてから画面をドラッグします（すべて置いたあとは点を直接ドラッグできます）。</div>
+      <div class="row">
+        <button class="small" id="bUndo">1つ戻す</button>
+        <button class="small" id="bSkip">見えないので飛ばす</button>
+        <span class="grow"></span>
+        <button class="small" id="bDigCancel">やめる</button>
+        <button class="small primary" id="bDigOk" disabled>記録する</button>
+      </div>
+    </div>
+    <div class="row" id="calRow"><button class="small" id="bCal" disabled>距離の基準を設定</button><span class="muted grow" id="calInfo"></span></div>
+    <div class="warn" id="calPanel" hidden>
+      <div id="calMsg"></div>
+      <div class="row" style="margin-top:6px">
+        <label class="f" style="flex:0 0 120px">2点間の距離（m）<input id="calM" type="number" min="0.1" step="0.01" value="2"></label>
+        <button class="small primary" id="bCalOk" disabled>決定</button>
+        <button class="small" id="bCalCancel">やめる</button>
+        <button class="small" id="bCalDel">基準を削除</button>
+      </div>
+    </div>
+    <h2 style="margin-top:4px">記録した場面</h2>
+    <div id="recs" style="display:flex;flex-direction:column;gap:8px"></div>
+  </section>
+
+  <section class="card" id="resCard" hidden>
+    <h2><span class="num">3</span><span id="resTitle">結果</span></h2>
+    <div class="tablewrap" id="summary"></div>
+    <div id="stp" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div id="findings" style="display:flex;flex-direction:column;gap:8px"></div>
+  </section>
+
+  <section class="card" id="sumCard" hidden>
+    <h2><span class="num">4</span>総合レポート</h2>
+    <div id="report" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div class="row">
+      <button class="primary" id="xPrint">レポートを印刷・PDF保存</button>
+      <button id="xAll">総合CSVを保存</button>
+      <button id="xCopy">総合結果をコピー</button>
+    </div>
+    <div class="muted" id="printMsg"></div>
+    <textarea id="copyArea" hidden readonly style="height:120px;font:12px ui-monospace,monospace"></textarea>
+  </section>
+
+  <section class="card">
+    <h2>保存</h2>
+    <div class="row">
+      <button class="small" id="bSaveProj">計測データを保存</button>
+      <label class="btn small">計測データを開く<input id="projIn" type="file" accept=".json,application/json" class="vh"></label>
+      <button class="small" id="bNew">新しい検査を始める</button>
+    </div>
+    <p class="muted" style="margin:0">計測データ（.json）には、タップした座標・場面の画像・距離の基準・対象者情報が入ります（動画は入りません）。開いたあと同じ名前の動画を枠に入れると、続けて計測できます。計測の途中経過はこの端末に自動保存されます。</p>
+    <div class="muted" id="status"></div>
+  </section>
+
+  <details class="card">
+    <summary>タップする場所と計測のコツ</summary>
+    <div class="help">
+      <p><b>側面（左側面・右側面）</b>：カメラ側の脚の6点</p>
+      <ul>
+        <li>肩：肩峰（肩の外側のいちばん出っぱった所）</li>
+        <li>股関節：大転子</li>
+        <li>膝：膝関節の中心（大腿骨外側上顆）</li>
+        <li>足首：外果（外くるぶし）</li>
+        <li>踵：踵の後ろ端</li>
+        <li>つま先：つま先の先端（第5中足骨頭にする場合は毎回同じ場所に）</li>
+      </ul>
+      <p><b>前方・後方</b>：左右の肩・股関節・膝・足首の8点。正面から撮った動画では人の右は画面の左に、背面から撮った動画では画面の右に映ります</p>
+      <ul>
+        <li>股関節：上前腸骨棘の少し下（大腿骨頭の高さ）を左右で同じ基準に</li>
+        <li>膝：膝蓋骨の中央／足首：左右のくるぶしの中央</li>
+      </ul>
+      <p><b>場面の選び方</b></p>
+      <ul>
+        <li>初期接地：踵が床に着いた最初のコマ</li>
+        <li>立脚中期：反対側の足が立脚側の足を追い越すコマ（頭が最も高くなるころ）</li>
+        <li>足尖離地：つま先が床から離れた最初のコマ</li>
+        <li>同じ場面を3周期以上記録すると、平均とばらつき（SD）が出せます。2回続けて初期接地を記録すると、周期時間・歩行率も計算します</li>
+      </ul>
+      <p><b>精度を上げるには</b></p>
+      <ul>
+        <li>撮影前に関節の位置へシールを貼ると、迷わずタップできます</li>
+        <li>60 fps以上で撮影し、コマ送り（◀ 1・1 ▶）で場面を決めます</li>
+        <li>同じ人が同じ基準でタップしてください。研究では検者内・検者間の信頼性を確認してください</li>
+      </ul>
+      <p><b>角度の定義（AI版と同じ）</b>：体幹＝股関節→肩の線と鉛直線のなす角（前傾＋）／股関節＝体幹線の延長と大腿のなす角（屈曲＋）／膝関節＝大腿と下腿のなす角（屈曲＋）／足関節＝下腿に垂直な線と踵→つま先の線のなす角（背屈＋）。前額面は 骨盤の傾き（遊脚側下制＋）・体幹側屈（立脚側へ＋）・立脚側の膝の見かけの角度FPPA（外反＋）。</p>
+      <p class="muted">判定幅は目安値に2D計測の誤差を見込んだアプリ独自の範囲で、妥当性は検証されていません。判定と文献はAI版の「参考数値」を参照してください。</p>
+    </div>
+  </details>
+</div>
+<div id="printArea"></div>
+
+<video id="vid" playsinline muted preload="auto" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0"></video>
+
+<script type="module">
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SN={R:'右',L:'左'};
+/* ---------- AI版と共通の定義・計算 ---------- */
+const deg=r=>r*180/Math.PI,wrap=a=>{while(a>180)a-=360;while(a<=-180)a+=360;return a;};
+const fmt=(v,d=1)=>v==null||!isFinite(v)?'—':v.toFixed(d);
+
+const JOINTS=[{k:'trunk',n:'体幹',s:'体幹',c:'--c-trunk',pos:'前傾',neg:'後傾'},{k:'hip',n:'股関節',s:'股',c:'--c-hip',pos:'屈曲',neg:'伸展'},{k:'knee',n:'膝関節',s:'膝',c:'--c-knee',pos:'屈曲',neg:'伸展'},{k:'ankle',n:'足関節',s:'足',c:'--c-ankle',pos:'背屈',neg:'底屈'}];
+const FJ=[{k:'pelvis',n:'骨盤の傾き',s:'骨盤',c:'--c-hip',pos:'遊脚側下制',neg:'遊脚側挙上'},{k:'tlat',n:'体幹側屈',s:'体幹',c:'--c-trunk',pos:'立脚側へ',neg:'遊脚側へ'},{k:'fknee',n:'立脚側の膝',s:'膝',c:'--c-knee',pos:'外反',neg:'内反'}];
+const JK=Object.fromEntries([...JOINTS,...FJ].map(j=>[j.k,j]));
+function clin(k,v,d=1){if(v==null||!isFinite(v))return'—';const j=JK[k],a=Math.abs(v);if(a<0.05)return'0°';return(v>0?j.pos:j.neg)+a.toFixed(d)+'°';}
+
+// 判定幅：Perry & Burnfield 2010 の値に2D・AI計測の誤差を見込んだアプリ独自の範囲（度、符号つき）
+const RANGE={
+  ic:{trunk:[-5,10],hip:[15,35],knee:[-5,10],ankle:[-5,10]},
+  peak:{trunk:[-5,10],hip:[-10,15],knee:[-5,20],ankle:[0,15]},
+  to:{trunk:[-5,10],hip:[-20,10],knee:[25,55],ankle:[-30,-5]},
+  mid:{pelvis:[-5,7],tlat:[-5,7],fknee:[-10,10]}
+};
+const PATTERNS=[
+  {n:'前足部接地（踵接地の欠如）',e:'ic',k:'ankle',op:'<',v:-10,d:'初期接地で足関節が底屈10°を超える'},
+  {n:'初期接地時の膝屈曲増大',e:'ic',k:'knee',op:'>',v:15,d:'初期接地で膝屈曲が15°を超える'},
+  {n:'立脚期の膝過伸展（ロッキング）',e:'peak',k:'knee',op:'<',v:-5,d:'立脚中期で膝が伸展5°を超える'},
+  {n:'立脚期の過度な膝屈曲（屈み歩行傾向）',e:'peak',k:'knee',op:'>',v:20,d:'立脚中期で膝屈曲が20°を超える'},
+  {n:'立脚中期の背屈不足（下腿前傾の不足）',e:'peak',k:'ankle',op:'<',v:0,d:'立脚中期で足関節が背屈に達しない'},
+  {n:'立脚中期の過度な背屈',e:'peak',k:'ankle',op:'>',v:20,d:'立脚中期で背屈が20°を超える'},
+  {n:'立脚後期の股関節伸展不足',e:'to',k:'hip',op:'>',v:10,d:'足尖離地で股関節屈曲が10°を超える（体幹基準）'},
+  {n:'離地時の膝屈曲不足（スティッフニー傾向）',e:'to',k:'knee',op:'<',v:25,d:'足尖離地で膝屈曲が25°未満'},
+  {n:'蹴り出し不足（離地時の底屈不足）',e:'to',k:'ankle',op:'>',v:-5,d:'足尖離地で底屈が5°未満'},
+  {n:'体幹前傾',e:'peak',k:'trunk',op:'>',v:10,d:'立脚中期で体幹前傾が10°を超える'},
+  {n:'体幹後傾',e:'peak',k:'trunk',op:'<',v:-5,d:'立脚中期で体幹後傾が5°を超える'}
+];
+const FPATTERNS=[
+  {n:'トレンデレンブルグ徴候（遊脚側の骨盤下制）',k:'pelvis',op:'>',v:7,d:'立脚中期に遊脚側の骨盤が7°を超えて下がる（立脚側の股関節外転筋の機能低下を示唆）'},
+  {n:'遊脚側骨盤の挙上（ヒップハイキング）',k:'pelvis',op:'<',v:-5,d:'立脚中期に遊脚側の骨盤が5°を超えて上がる'},
+  {n:'デュシェンヌ徴候（立脚側への体幹側屈）',k:'tlat',op:'>',v:7,d:'立脚中期に体幹が立脚側へ7°を超えて傾く'},
+  {n:'立脚期の膝外反（ニーイン）',k:'fknee',op:'>',v:10,d:'立脚中期に膝が内側へ入り、見かけの外反が10°を超える'},
+  {n:'立脚期の膝内反（ラテラルスラストの疑い）',k:'fknee',op:'<',v:-10,d:'立脚中期に膝が外側へ出て、見かけの内反が10°を超える'}
+];
+const LR_DIFF=10;
+
+async function fixDuration(){
+  if(isFinite(vid.duration))return;
+  await new Promise(r=>{const h=()=>{if(isFinite(vid.duration)){vid.removeEventListener('durationchange',h);r();}};
+    vid.addEventListener('durationchange',h);vid.currentTime=1e7;setTimeout(r,4000);});
+  vid.currentTime=0;
+}
+
+function seekFrame(s,f){
+  return new Promise(res=>{
+    const t=(f+0.5)/s.fileFps;
+    if(Math.abs(vid.currentTime-t)<1e-4&&vid.readyState>=2){res();return;}
+    let done=false;
+    const fin=()=>{if(done)return;done=true;vid.removeEventListener('seeked',on);clearTimeout(to);res();};
+    const on=()=>{if('requestVideoFrameCallback' in vid){let ok=false;vid.requestVideoFrameCallback(()=>{ok=true;fin();});setTimeout(()=>{if(!ok)fin();},150);}else fin();};
+    const to=setTimeout(fin,5000);
+    vid.addEventListener('seeked',on);vid.currentTime=t;
+  });
+}
+
+function angles(p){
+  const r={trunk:null,hip:null,knee:null,ankle:null};
+  const down=(a,b)=>deg(Math.atan2(b.x-a.x,-(b.y-a.y)));
+  const{sh,hip,knee,ank,heel,toe}=p;
+  if(sh&&hip)r.trunk=deg(Math.atan2(sh.x-hip.x,sh.y-hip.y));
+  const th=hip&&knee?down(hip,knee):null,sk=knee&&ank?down(knee,ank):null;
+  if(sh&&hip&&th!=null)r.hip=wrap(th-down(sh,hip));
+  if(th!=null&&sk!=null)r.knee=wrap(th-sk);
+  if(heel&&toe&&sk!=null)r.ankle=wrap(deg(Math.atan2(toe.y-heel.y,toe.x-heel.x))-sk);
+  r.shank=sk;
+  return r;
+}
+// 前額面：骨盤（＋＝右が低い）、体幹側屈（＋＝右へ）、膝FPPA（＋＝外反）
+function frontal(p){
+  const r={obliq:null,tlat:null,kneeR:null,kneeL:null};
+  const{hipR,hipL,shR,shL,kneeR,kneeL,ankR,ankL}=p;
+  if(hipR&&hipL){
+    r.obliq=deg(Math.atan2(hipL.y-hipR.y,Math.abs(hipL.x-hipR.x)));
+    if(shR&&shL){const hm={x:(hipR.x+hipL.x)/2,y:(hipR.y+hipL.y)/2},sm={x:(shR.x+shL.x)/2,y:(shR.y+shL.y)/2},sR=Math.sign(hipR.x-hipL.x)||1;
+      r.tlat=deg(Math.atan2((sm.x-hm.x)*sR,sm.y-hm.y));}
+    const fppa=(hip,knee,ank,other)=>{
+      if(!hip||!knee||!ank)return null;
+      const a={x:knee.x-hip.x,y:knee.y-hip.y},b={x:ank.x-knee.x,y:ank.y-knee.y};
+      const c=(a.x*b.x+a.y*b.y)/(Math.hypot(a.x,a.y)*Math.hypot(b.x,b.y)||1);
+      const mag=deg(Math.acos(Math.max(-1,Math.min(1,c))));
+      const t=(ank.y-hip.y)?(knee.y-hip.y)/(ank.y-hip.y):0.5,lx=hip.x+(ank.x-hip.x)*t;
+      const medial=Math.sign(other.x-hip.x)||1;
+      return(knee.x-lx)*medial>=0?mag:-mag;
+    };
+    r.kneeR=fppa(hipR,kneeR,ankR,hipL);r.kneeL=fppa(hipL,kneeL,ankL,hipR);
+  }
+  return r;
+}
+
+function stats(a){a=a.filter(v=>v!=null&&isFinite(v));if(!a.length)return null;const n=a.length,m=a.reduce((s,v)=>s+v,0)/n;
+  return{m,sd:n>1?Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(n-1)):null,n};}
+
+/* ---------- 手動版の定義 ---------- */
+const REF={ic:{trunk:null,hip:'屈曲25°',knee:'0°',ankle:'0°'},peak:{trunk:null,hip:'0°前後',knee:'軽度屈曲',ankle:'背屈5〜10°'},to:{trunk:null,hip:'0°前後',knee:'屈曲40°',ankle:'底屈20°'}};
+const EVN={ic:'初期接地',peak:'立脚中期',to:'足尖離地',mR:'右立脚中期',mL:'左立脚中期'};
+const rangeTxt=(k,r)=>`${clin(k,r[0],0)}〜${clin(k,r[1],0)}`;
+const SLOTS=[
+  {id:'left',n:'左側面',sub:'左脚を計測',kind:'sag',side:'L',hint:'人の左側から撮影（左脚がカメラ側）'},
+  {id:'right',n:'右側面',sub:'右脚を計測',kind:'sag',side:'R',hint:'人の右側から撮影（右脚がカメラ側）'},
+  {id:'front',n:'前方',sub:'正面',kind:'fro',view:'front',hint:'正面から、こちらへ歩いてくるところを撮影（人の右は画面の左）'},
+  {id:'back',n:'後方',sub:'背面',kind:'fro',view:'back',hint:'背面から、向こうへ歩いていくところを撮影（人の右は画面の右）'}
+];
+const EVS={
+  sag:[{k:'ic',n:'初期接地',h:'踵が着いた瞬間'},{k:'peak',n:'立脚中期',h:'反対の足が追い越す'},{k:'to',n:'足尖離地',h:'つま先が離れた瞬間'}],
+  fro:[{k:'mR',n:'右立脚中期',h:'右で立ち左足が追い越す'},{k:'mL',n:'左立脚中期',h:'左で立ち右足が追い越す'}]
+};
+const SAGP=[{k:'sh',n:'肩',h:'肩峰'},{k:'hip',n:'股関節',h:'大転子'},{k:'knee',n:'膝',h:'膝関節の中心（大腿骨外側上顆）'},{k:'ank',n:'足首',h:'外果（外くるぶし）'},{k:'heel',n:'踵',h:'踵の後ろ端'},{k:'toe',n:'つま先',h:'つま先の先端'}];
+const FROP=[{k:'shR',n:'右肩'},{k:'shL',n:'左肩'},{k:'hipR',n:'右股関節'},{k:'hipL',n:'左股関節'},{k:'kneeR',n:'右膝',h:'膝蓋骨の中央'},{k:'kneeL',n:'左膝',h:'膝蓋骨の中央'},{k:'ankR',n:'右足首',h:'くるぶしの中央'},{k:'ankL',n:'左足首',h:'くるぶしの中央'}];
+const PDEF=s=>s.kind==='sag'?SAGP:FROP;
+const PN=Object.fromEntries([...SAGP,...FROP].map(p=>[p.k,p]));
+
+/* ---------- 状態 ---------- */
+const S={};SLOTS.forEach(d=>S[d.id]={...d,blob:null,url:null,name:'',vw:0,vh:0,nFrames:0,fileFps:30,capFps:30,dir:'auto',cal:null,recs:[],cur:0});
+let act='left',mode=null,playing=false,busy=false,pend=null,drag=null;
+const sl=()=>S[act];
+const vid=$('vid'),view=$('view'),vctx=view.getContext('2d');
+const tReal=(s,f)=>f/s.capFps;
+const stamp=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;};
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---------- 対象者情報 ---------- */
+const PF=['pid','pname','exdate','age','sex','height','diag','aid','examiner','memo'];
+const PL={pid:'ID',pname:'氏名',exdate:'検査日',age:'年齢',sex:'性別',height:'身長（cm）',diag:'診断名・障害名',aid:'補助具・装具',examiner:'検査者',memo:'メモ'};
+let P={};
+const readP=()=>PF.forEach(k=>P[k]=$('p_'+k).value.trim());
+const writeP=()=>PF.forEach(k=>$('p_'+k).value=P[k]||'');
+PF.forEach(k=>$('p_'+k).addEventListener('input',()=>{readP();autosave();}));
+
+/* ---------- 枠・動画 ---------- */
+function renderSlots(){
+  $('slots').innerHTML=SLOTS.map(d=>{const s=S[d.id],n=s.recs.length;
+    const st=n?`<span class="st done">${n}場面</span>`:s.url?'<span class="st">動画あり</span>':'<span class="st" style="color:var(--muted)">未選択</span>';
+    return`<button class="slot${d.id===act?' on':''}" data-slot="${d.id}">${d.n}<small>${d.sub}</small>${st}</button>`;}).join('');
+  $('slots').querySelectorAll('[data-slot]').forEach(b=>b.onclick=()=>selectSlot(b.dataset.slot));
+}
+async function selectSlot(id){
+  stopPlay();endMode();
+  act=id;const s=sl();renderSlots();
+  $('slotHint').textContent=s.hint;
+  $('capFps').value=String([30,60,120,240].reduce((a,b)=>Math.abs(b-s.capFps)<Math.abs(a-s.capFps)?b:a));
+  $('fileFps').value=s.fileFps;$('dir').value=s.dir;$('dirWrap').hidden=s.kind!=='sag';$('calRow').hidden=s.kind!=='sag';
+  $('fname').textContent=s.name+(!s.url&&s.recs.length?'　（動画なし：同じ名前の動画を入れると続けて計測できます）':'');
+  $('bClear').hidden=!(s.url||s.recs.length);
+  $('evHint').textContent=s.kind==='sag'?'カメラ側の脚の場面を選び、肩・股関節・膝・足首・踵・つま先の6点をタップします。':'場面を選び、左右の肩・股関節・膝・足首の8点をタップします。';
+  $('evbtns').className='evbtns'+(s.kind==='fro'?' two':'');
+  $('evbtns').innerHTML=EVS[s.kind].map(e=>`<button data-ev="${e.k}" disabled>${e.n}<small>${e.h}</small></button>`).join('');
+  $('evbtns').querySelectorAll('[data-ev]').forEach(b=>b.onclick=()=>startDig(b.dataset.ev));
+  updCalInfo();
+  if(s.url){await attach(id);if(act!==id)return;showVideoUI(true);show(s.cur);}
+  else showVideoUI(false);
+  renderRecs();renderResults();
+}
+function showVideoUI(on){
+  $('empty').hidden=on;view.hidden=!on;$('badge').hidden=!on;
+  ['scrub','bPrev','bNext','bPrev5','bNext5','bPlay','bCal'].forEach(id=>$(id).disabled=!on);
+  $('evbtns').querySelectorAll('button').forEach(b=>b.disabled=!on);
+}
+function attach(id){
+  return new Promise(res=>{
+    const s=S[id];if(!s.url){res(false);return;}
+    if(vid.dataset.slot===id&&vid.readyState>=1&&s.vw){setView(s);res(true);return;}
+    const on=async()=>{
+      vid.removeEventListener('loadedmetadata',on);await fixDuration();
+      s.vw=vid.videoWidth;s.vh=vid.videoHeight;
+      s.nFrames=Math.max(1,Math.floor(vid.duration*s.fileFps+1e-6));
+      setView(s);res(true);
+    };
+    vid.dataset.slot=id;vid.addEventListener('loadedmetadata',on);vid.src=s.url;vid.load();
+  });
+}
+function setView(s){const W=Math.min(s.vw,1280),H=Math.round(s.vh*W/s.vw);if(view.width!==W||view.height!==H){view.width=W;view.height=H;}$('scrub').max=s.nFrames-1;}
+function loadInto(id,blob,name){
+  const s=S[id];if(s.url)URL.revokeObjectURL(s.url);
+  if(vid.dataset.slot===id)vid.dataset.slot='';
+  // 計測データから復元した枠に同じ名前の動画を入れたときは、記録をそのまま使う
+  const keep=!s.url&&s.recs.length&&s.name===name;
+  Object.assign(s,{blob,url:URL.createObjectURL(blob),name,cur:0});
+  if(!keep)Object.assign(s,{recs:[],cal:null,vw:0,vh:0});
+  selectSlot(id);renderReport();
+}
+['file','cap'].forEach(id=>$(id).addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;e.target.value='';
+  const s=sl();
+  if(s.recs.length&&s.name!==(f.name||'')&&!confirm(`${s.n}に記録した${s.recs.length}場面を消して、新しい動画を入れますか？`))return;
+  loadInto(act,f,f.name||`撮影_${stamp()}.mp4`);
+}));
+$('bClear').onclick=()=>{const s=sl();if(s.recs.length&&!confirm(`${s.n}の動画と記録した${s.recs.length}場面を消しますか？`))return;if(s.url)URL.revokeObjectURL(s.url);Object.assign(s,{blob:null,url:null,name:'',recs:[],cal:null,vw:0,vh:0,nFrames:0});vid.dataset.slot='';selectSlot(act);renderReport();};
+$('capFps').addEventListener('change',()=>{sl().capFps=+$('capFps').value;renderRecs();renderResults();renderReport();});
+$('fileFps').addEventListener('change',()=>{const s=sl(),v=+$('fileFps').value;if(!(v>0))return;
+  if(s.recs.length&&!confirm('ファイルのfpsを変えると、記録した場面のコマ番号がずれます。変更しますか？')){$('fileFps').value=s.fileFps;return;}
+  s.fileFps=v;if(s.vw){s.nFrames=Math.max(1,Math.floor(vid.duration*v+1e-6));setView(s);show(Math.min(s.cur,s.nFrames-1));}});
+$('dir').addEventListener('change',()=>{sl().dir=$('dir').value;renderRecs();renderResults();renderReport();});
+
+/* ---------- 表示 ---------- */
+async function show(f){
+  const s=sl();if(!s.vw||!s.url)return;
+  if(playing)stopPlay();
+  pend=Math.max(0,Math.min(s.nFrames-1,Math.round(f)));
+  if(busy)return;busy=true;
+  while(pend!==null){const g=pend;pend=null;s.cur=g;$('scrub').value=g;await seekFrame(s,g);if(sl()===s)drawView();}
+  busy=false;
+}
+$('scrub').addEventListener('input',e=>{if(mode&&mode.type==='dig')return;show(+e.target.value);});
+[['bPrev',-1],['bNext',1],['bPrev5',-5],['bNext5',5]].forEach(([id,d])=>$(id).onclick=()=>{if(mode&&mode.type==='dig')return;show(sl().cur+d);});
+// 動画の座標（px）→ キャンバス：p*k + o
+function render(ctx,k,ox,oy,W,H,u){
+  const s=sl();
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  ctx.setTransform(k,0,0,k,ox,oy);
+  if(vid.dataset.slot===s.id&&vid.readyState>=2)ctx.drawImage(vid,0,0,s.vw,s.vh);
+  if(mode&&mode.type==='dig')drawFigure(ctx,s,mode.pts,k,u,mode);
+  else if(!mode){const r=s.recs.find(r=>r.f===s.cur);if(r)drawFigure(ctx,s,r.pts,k,u,null);}
+  const cp=mode&&mode.type==='cal'?mode.pts:s.cal?s.cal.p:null;
+  if(cp&&cp.length){const lw=2*u/k;ctx.strokeStyle='#ffd23f';ctx.fillStyle='#ffd23f';ctx.lineWidth=lw;
+    if(cp.length===2){ctx.setLineDash([lw*4,lw*3]);ctx.beginPath();ctx.moveTo(...cp[0]);ctx.lineTo(...cp[1]);ctx.stroke();ctx.setLineDash([]);}
+    cp.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],lw*3,0,Math.PI*2);ctx.stroke();});}
+  ctx.setTransform(1,0,0,1,0,0);
+}
+function drawFigure(ctx,s,pts,k,u,m){
+  const lw=2.2*u/k,P=key=>pts[key];
+  const seg=(a,b,c)=>{const p=P(a),q=P(b);if(!p||!q)return;ctx.strokeStyle=c;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();};
+  ctx.lineWidth=lw;ctx.lineCap='round';
+  if(s.kind==='sag'){const c='rgba(255,255,255,.95)';[['sh','hip'],['hip','knee'],['knee','ank'],['ank','heel'],['heel','toe'],['ank','toe']].forEach(([a,b])=>seg(a,b,c));}
+  else{seg('shR','shL','rgba(255,255,255,.9)');seg('hipR','hipL','#ffd23f');
+    [['R','rgba(255,120,110,.95)'],['L','rgba(110,180,255,.95)']].forEach(([x,c])=>{seg('sh'+x,'hip'+x,c);seg('hip'+x,'knee'+x,c);seg('knee'+x,'ank'+x,c);});}
+  const next=m?nextKey():null;
+  ctx.font=`600 ${12*u/k}px sans-serif`;
+  for(const d of PDEF(s)){const p=P(d.k);if(!p)continue;
+    ctx.beginPath();ctx.arc(p[0],p[1],lw*2,0,Math.PI*2);ctx.fillStyle=drag&&drag.key===d.k?'#ffd23f':'#2ee6b0';ctx.fill();
+    ctx.lineWidth=lw*0.6;ctx.strokeStyle='#000';ctx.stroke();ctx.lineWidth=lw;
+    if(m){ctx.fillStyle='#fff';ctx.strokeStyle='rgba(0,0,0,.8)';ctx.lineWidth=3*u/k;ctx.strokeText(d.n,p[0]+lw*3,p[1]-lw*2);ctx.fillText(d.n,p[0]+lw*3,p[1]-lw*2);ctx.lineWidth=lw;}
+  }
+}
+function drawView(){
+  const s=sl();if(!s.vw)return;
+  const u=view.width/(view.clientWidth||view.width);
+  render(vctx,view.width/s.vw,0,0,view.width,view.height,u);
+  let label=`${s.n}　${tReal(s,s.cur).toFixed(3)} 秒　コマ ${s.cur}`;
+  const r=!mode&&s.recs.find(r=>r.f===s.cur);
+  if(r){const v=recVal(s,r);label=`${EVN[r.ev]}　`+label+'　'+(s.kind==='sag'?JOINTS.map(j=>j.s+' '+clin(j.k,v[j.k])):FJ.map(j=>j.s+' '+clin(j.k,v[j.k]))).join('　');}
+  if(mode&&mode.type==='dig')label=`${EVN[mode.ev]}を計測中　`+label;
+  $('badge').textContent=label;
+}
+
+/* ---------- 再生 ---------- */
+function stopPlay(){if(!playing)return;playing=false;vid.pause();$('bPlay').textContent='▶ 再生';}
+$('bPlay').onclick=()=>{
+  if(playing){stopPlay();return;}
+  const s=sl();if(!s.vw||!s.url||busy||mode)return;
+  const f0=s.cur>=s.nFrames-1?0:s.cur;
+  playing=true;$('bPlay').textContent='❚❚ 停止';
+  vid.currentTime=(f0+0.5)/s.fileFps;vid.playbackRate=+$('rate').value;vid.play().catch(()=>stopPlay());
+  const tick=()=>{if(!playing||sl()!==s)return;
+    const f=Math.min(s.nFrames-1,Math.floor(vid.currentTime*s.fileFps));s.cur=f;$('scrub').value=f;drawView();
+    if(vid.ended||f>=s.nFrames-1){stopPlay();return;}requestAnimationFrame(tick);};
+  requestAnimationFrame(tick);
+};
+$('rate').addEventListener('change',()=>{if(playing)vid.playbackRate=+$('rate').value;});
+
+/* ---------- タップ（デジタイズ・距離の基準） ---------- */
+function toVid(e){const r=view.getBoundingClientRect(),s=sl();return[Math.max(0,Math.min(s.vw,(e.clientX-r.left)/r.width*s.vw)),Math.max(0,Math.min(s.vh,(e.clientY-r.top)/r.height*s.vh))];}
+function nextKey(){if(!mode||mode.type!=='dig')return null;const d=PDEF(sl()).find(d=>!mode.pts[d.k]&&!mode.skip.has(d.k));return d?d.k:null;}
+function startDig(ev,rec){
+  const s=sl();if(!s.vw||!s.url)return;
+  stopPlay();endMode();
+  if(rec&&s.cur!==rec.f){show(rec.f).then(()=>startDig(ev,rec));return;}
+  if(!rec){const ex=s.recs.find(r=>r.f===s.cur&&r.ev===ev);if(ex&&!confirm(`このコマの${EVN[ev]}はすでに記録しています。新しく記録し直しますか？`))return;if(ex)rec=ex;}
+  mode={type:'dig',ev,f:s.cur,pts:rec?JSON.parse(JSON.stringify(rec.pts)):{},skip:new Set(rec?PDEF(s).filter(d=>!rec.pts[d.k]).map(d=>d.k):[]),edit:rec?rec.id:null,order:[]};
+  if(rec)mode.skip.clear();
+  view.classList.add('tap');$('digPanel').hidden=false;
+  ['scrub','bPrev','bNext','bPrev5','bNext5','bPlay','bCal'].forEach(id=>$(id).disabled=true);
+  updDig();drawView();
+  $('viewerBox').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function updDig(){
+  const s=sl(),k=nextKey(),defs=PDEF(s);
+  const done=defs.filter(d=>mode.pts[d.k]).length;
+  $('digNext').innerHTML=k?`次：<b>${PN[k].n}</b>${PN[k].h?`（${PN[k].h}）`:''}をタップ　<span class="muted">${done}/${defs.length}</span>`:`すべての点を置きました。位置を確かめて「記録する」を押してください。`;
+  $('digChips').innerHTML=defs.map(d=>`<button type="button" data-pt="${d.k}" class="chip ${mode.sel===d.k?'now':mode.pts[d.k]?'ok':d.k===k&&!mode.sel?'now':mode.skip.has(d.k)?'skip':''}">${d.n}${mode.pts[d.k]?' ✓':''}</button>`).join('');
+  $('digChips').querySelectorAll('[data-pt]').forEach(b=>b.onclick=()=>{const key=b.dataset.pt;
+    if(mode.pts[key])mode.sel=mode.sel===key?null:key;else{mode.skip.delete(key);mode.sel=null;
+      // 飛ばした点・未入力の点を次に置く
+      const defs2=PDEF(sl());mode.skip=new Set([...mode.skip]);defs2.forEach(d=>{if(!mode.pts[d.k]&&d.k!==key&&defs2.indexOf(d)<defs2.findIndex(x=>x.k===key))mode.skip.add(d.k);});}
+    updDig();drawView();});
+  if(mode.sel)$('digNext').innerHTML=`<b>${PN[mode.sel].n}</b>を修正：画面上のどこでもドラッグすると、指の動いた分だけ点が動きます`;
+  $('bDigOk').disabled=!!k||!done;$('bSkip').disabled=!k;$('bUndo').disabled=!mode.order.length&&!done;
+}
+function endMode(){
+  if(!mode)return;const was=mode.type;mode=null;drag=null;
+  view.classList.remove('tap');$('digPanel').hidden=true;$('calPanel').hidden=true;$('loupe').hidden=true;
+  const s=sl();showVideoUI(!!(s.url&&s.vw));
+  if(s.vw&&s.url&&!busy)drawView();
+  return was;
+}
+view.addEventListener('pointerdown',e=>{
+  if(!mode)return;e.preventDefault();
+  const s=sl(),p=toVid(e),r=view.getBoundingClientRect(),hit=24*s.vw/r.width;
+  if(mode.type==='cal'){if(mode.pts.length>=2)mode.pts=[];mode.pts.push(p);drag={key:mode.pts.length-1,cal:true};}
+  else{
+    // 選んだ点は指の動いた分だけ動かす（指で点が隠れない）。それ以外は次の点を置く。全部置いたあとは近い点を動かす
+    let key=mode.sel&&mode.pts[mode.sel]?mode.sel:null;
+    if(!key){const nk=nextKey();
+      if(nk){key=nk;mode.pts[key]=p;mode.order.push(key);}
+      else{let best=hit*1.5;for(const[k2,q]of Object.entries(mode.pts)){const d=Math.hypot(q[0]-p[0],q[1]-p[1]);if(d<best){best=d;key=k2;}}if(!key)return;}}
+    drag={key,dx:mode.pts[key][0]-p[0],dy:mode.pts[key][1]-p[1]};
+  }
+  try{view.setPointerCapture(e.pointerId);}catch(_){}
+  drawLoupe(e);drawView();
+});
+view.addEventListener('pointermove',e=>{
+  if(!mode||!drag)return;e.preventDefault();const p=toVid(e);
+  if(drag.cal)mode.pts[drag.key]=p;else mode.pts[drag.key]=[p[0]+drag.dx,p[1]+drag.dy];
+  drawLoupe(e);drawView();
+});
+const up=()=>{if(!drag)return;drag=null;if(mode&&mode.sel){mode.sel=null;}$('loupe').hidden=true;if(mode&&mode.type==='dig')updDig();else if(mode)updCalPanel();drawView();};
+view.addEventListener('pointerup',up);view.addEventListener('pointercancel',up);
+function drawLoupe(e){
+  const L=$('loupe'),s=sl(),r=view.getBoundingClientRect(),dpr=devicePixelRatio||1,Z=150;
+  const p=drag.cal?mode.pts[drag.key]:mode.pts[drag.key];
+  L.hidden=false;L.style.left=(e.clientX-r.left<r.width/2)?'':'8px';L.style.right=(e.clientX-r.left<r.width/2)?'8px':'';
+  L.width=Z*dpr;L.height=Z*dpr;const c=L.getContext('2d'),kk=3*r.width/s.vw*dpr;
+  render(c,kk,Z*dpr/2-p[0]*kk,Z*dpr/2-p[1]*kk,L.width,L.height,dpr);
+  c.strokeStyle='rgba(255,255,255,.9)';c.lineWidth=dpr;c.beginPath();c.moveTo(Z*dpr/2,Z*dpr/2-14*dpr);c.lineTo(Z*dpr/2,Z*dpr/2+14*dpr);c.moveTo(Z*dpr/2-14*dpr,Z*dpr/2);c.lineTo(Z*dpr/2+14*dpr,Z*dpr/2);c.stroke();
+}
+$('bUndo').onclick=()=>{if(!mode||mode.type!=='dig')return;
+  const k=mode.order.pop();if(k){delete mode.pts[k];}
+  else{const defs=PDEF(sl()).filter(d=>mode.pts[d.k]);if(defs.length)delete mode.pts[defs[defs.length-1].k];else mode.skip.clear();}
+  updDig();drawView();};
+$('bSkip').onclick=()=>{const k=nextKey();if(k){mode.skip.add(k);updDig();drawView();}};
+$('bDigCancel').onclick=()=>endMode();
+$('bDigOk').onclick=()=>{
+  const s=sl();if(!mode||mode.type!=='dig')return;
+  const pts={};for(const[k,v]of Object.entries(mode.pts))pts[k]=[+v[0].toFixed(1),+v[1].toFixed(1)];
+  const old=mode.edit?s.recs.find(r=>r.id===mode.edit):null;
+  const rec={id:old?old.id:uid(),f:mode.f,ev:mode.ev,pts,use:old?old.use:true,img:null};
+  const m=mode;mode=null;rec.img=thumb(s,rec);mode=m;
+  if(old)s.recs[s.recs.indexOf(old)]=rec;else s.recs.push(rec);
+  s.recs.sort((a,b)=>a.f-b.f);
+  endMode();renderSlots();renderRecs();renderResults();renderReport();
+  $('status').textContent=`${s.n}：${EVN[rec.ev]}（${tReal(s,rec.f).toFixed(3)} 秒）を記録しました。`;
+};
+// 記録した場面の画像（人物の周りを縦長に切り出す）
+function thumb(s,rec){
+  const W=240,H=320,xs=Object.values(rec.pts).map(p=>p[0]),ys=Object.values(rec.pts).map(p=>p[1]);
+  let bh=ys.length?(Math.max(...ys)-Math.min(...ys))*1.35:s.vh;const cy=ys.length?(Math.max(...ys)+Math.min(...ys))/2:s.vh/2,cx=xs.length?(Math.max(...xs)+Math.min(...xs))/2:s.vw/2;
+  bh=Math.min(Math.max(bh,s.vh*0.25),s.vh);let bw=bh*W/H;if(bw>s.vw){bw=s.vw;bh=bw*H/W;}
+  const sx=Math.max(0,Math.min(s.vw-bw,cx-bw/2)),sy=Math.max(0,Math.min(s.vh-bh,cy-bh/2)),k=W/bw;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
+  c.fillStyle='#000';c.fillRect(0,0,W,H);c.setTransform(k,0,0,k,-sx*k,-sy*k);
+  if(vid.dataset.slot===s.id&&vid.readyState>=2)c.drawImage(vid,0,0,s.vw,s.vh);
+  drawFigure(c,s,rec.pts,k,1,null);
+  try{return cv.toDataURL('image/jpeg',0.8);}catch(e){return null;}
+}
+
+/* ---------- 距離の基準 ---------- */
+function updCalInfo(){const s=sl();$('calInfo').textContent=s.cal?`基準：${s.cal.m} m（2点指定）`:'基準なし：歩幅・歩行速度は表示されません';}
+function updCalPanel(){const n=mode&&mode.type==='cal'?mode.pts.length:0;
+  $('calMsg').textContent=n===0?'動画の上で、距離がわかる2点（歩く線の上に置いた床のテープの両端など）をタップしてください。2 m以上離れた点を使うと正確になります。':n===1?'2点目をタップしてください。':'2点を指定しました。距離を入れて「決定」を押してください（タップし直すと選び直せます）。';
+  $('bCalOk').disabled=n!==2;$('bCalDel').hidden=!sl().cal;}
+$('bCal').onclick=()=>{const s=sl();if(!s.vw||!s.url)return;stopPlay();endMode();mode={type:'cal',pts:[]};if(s.cal)$('calM').value=s.cal.m;$('calPanel').hidden=false;view.classList.add('tap');updCalPanel();drawView();$('viewerBox').scrollIntoView({behavior:'smooth',block:'start'});};
+$('bCalOk').onclick=()=>{const s=sl(),m=+$('calM').value;if(!mode||mode.type!=='cal'||mode.pts.length!==2||!(m>0))return;s.cal={p:mode.pts.map(p=>[+p[0].toFixed(1),+p[1].toFixed(1)]),m};endMode();updCalInfo();renderResults();renderReport();};
+$('bCalCancel').onclick=()=>endMode();
+$('bCalDel').onclick=()=>{sl().cal=null;endMode();updCalInfo();renderResults();renderReport();};
+
+/* ---------- 計算 ---------- */
+function dirOf(s,r){
+  if(s.dir!=='auto')return+s.dir;
+  const P=r.pts;if(P.heel&&P.toe&&Math.abs(P.toe[0]-P.heel[0])>1)return Math.sign(P.toe[0]-P.heel[0]);
+  const h=s.recs.filter(x=>x.pts.hip);if(h.length>1)return h[h.length-1].pts.hip[0]>=h[0].pts.hip[0]?1:-1;
+  return 1;
+}
+function recVal(s,r){
+  const P=r.pts;
+  if(s.kind==='sag'){const d=dirOf(s,r),q=k=>P[k]?{x:d*P[k][0],y:-P[k][1]}:null;
+    return angles({sh:q('sh'),hip:q('hip'),knee:q('knee'),ank:q('ank'),heel:q('heel'),toe:q('toe')});}
+  const q=k=>P[k]?{x:P[k][0],y:-P[k][1]}:null;
+  const fr=frontal({hipR:q('hipR'),hipL:q('hipL'),shR:q('shR'),shL:q('shL'),kneeR:q('kneeR'),kneeL:q('kneeL'),ankR:q('ankR'),ankL:q('ankL')});
+  return r.ev==='mR'?{pelvis:fr.obliq!=null?-fr.obliq:null,tlat:fr.tlat,fknee:fr.kneeR}:{pelvis:fr.obliq,tlat:fr.tlat!=null?-fr.tlat:null,fknee:fr.kneeL};
+}
+const used=s=>s.recs.filter(r=>r.use);
+function meansOf(s){const o={};for(const e of EVS[s.kind]){o[e.k]={};const rs=used(s).filter(r=>r.ev===e.k);for(const j of(s.kind==='sag'?JOINTS:FJ))o[e.k][j.k]=stats(rs.map(r=>recVal(s,r)[j.k]));}return o;}
+function findingsOf(s){
+  const out=[],U=used(s);if(!U.length)return out;
+  if(s.kind==='sag'){
+    for(const e of['ic','peak','to']){const rs=U.filter(r=>r.ev===e);if(!rs.length)continue;
+      for(const j of JOINTS){const rg=RANGE[e][j.k],xs=rs.map(r=>recVal(s,r)[j.k]).filter(v=>v!=null);if(!xs.length)continue;
+        const m=xs.reduce((a,b)=>a+b,0)/xs.length,o=xs.filter(v=>v<rg[0]||v>rg[1]).length;
+        if(m<rg[0]||m>rg[1])out.push({type:'値',side:s.side,label:`${EVN[e]}・${j.n}`,val:clin(j.k,m),ref:rangeTxt(j.k,rg),cnt:`${o}/${xs.length}`});}}
+    for(const p of PATTERNS){const rs=U.filter(r=>r.ev===p.e),N=rs.length;if(!N)continue;
+      const hit=rs.filter(r=>{const v=recVal(s,r)[p.k];return v!=null&&(p.op==='<'?v<p.v:v>p.v);});
+      if(hit.length&&hit.length*2>=N)out.push({type:'型',side:s.side,label:p.n.replace('頭部最高点','立脚中期'),desc:p.d,cnt:`${hit.length}/${N}`});}
+    const t=stpOf(s);
+    if(t&&t.speed&&t.speed.m<1.0)out.push({type:'値',side:s.side,label:'歩行速度',val:t.speed.m.toFixed(2)+' m/s',ref:'1.0 m/s 以上（AWGS 2019）',cnt:`${t.speed.n}周期`});
+  }else{
+    for(const side of['R','L']){const rs=U.filter(r=>r.ev==='m'+side),N=rs.length;if(!N)continue;
+      for(const j of FJ){const rg=RANGE.mid[j.k],xs=rs.map(r=>recVal(s,r)[j.k]).filter(v=>v!=null);if(!xs.length)continue;
+        const m=xs.reduce((a,b)=>a+b,0)/xs.length,o=xs.filter(v=>v<rg[0]||v>rg[1]).length;
+        if(m<rg[0]||m>rg[1])out.push({type:'値',side,label:`${EVN['m'+side]}・${j.n}`,val:clin(j.k,m),ref:rangeTxt(j.k,rg),cnt:`${o}/${xs.length}`});}
+      for(const p of FPATTERNS){const hit=rs.filter(r=>{const v=recVal(s,r)[p.k];return v!=null&&(p.op==='<'?v<p.v:v>p.v);});
+        if(hit.length&&hit.length*2>=N)out.push({type:'型',side,label:p.n,desc:p.d,cnt:`${hit.length}/${N}`});}
+    }
+  }
+  return out;
+}
+// 時間・距離因子：続けて記録した初期接地の間隔から求める
+function stpOf(s){
+  const U=used(s),T=r=>tReal(s,r.f);
+  if(s.kind==='fro'){const it=U.slice().sort((a,b)=>a.f-b.f),dt=[];
+    for(let k=1;k<it.length;k++)if(it[k].ev!==it[k-1].ev){const d=T(it[k])-T(it[k-1]);if(d>0.2&&d<2)dt.push(d);}
+    return dt.length?{type:'fro',step:stats(dt),cad:stats(dt.map(d=>60/d))}:null;}
+  const ics=U.filter(r=>r.ev==='ic'),tos=U.filter(r=>r.ev==='to'),per=[];
+  const k=s.cal?s.cal.m/Math.hypot(s.cal.p[1][0]-s.cal.p[0][0],s.cal.p[1][1]-s.cal.p[0][1]):null;
+  for(let i=0;i+1<ics.length;i++){const a=ics[i],b=ics[i+1],t=T(b)-T(a);if(!(t>0.5&&t<2.5))continue;
+    const to=tos.find(x=>x.f>a.f&&x.f<b.f);
+    const stride=a.pts.heel&&b.pts.heel&&k?Math.abs(b.pts.heel[0]-a.pts.heel[0])*k:null;
+    per.push({t,stance:to?T(to)-T(a):null,swing:to?T(b)-T(to):null,stride,speed:stride!=null?stride/t:null});}
+  const solo=ics.map(a=>{const to=tos.find(x=>x.f>a.f&&T(x)-T(a)<1.5&&!ics.some(c=>c.f>a.f&&c.f<x.f));return to?T(to)-T(a):null;});
+  if(!per.length&&!solo.some(v=>v!=null))return null;
+  const st=x=>stats(per.map(p=>p[x]));
+  return{type:'sag',n:per.length,cyc:st('t'),cad:stats(per.map(p=>120/p.t)),stance:stats(solo),swing:st('swing'),stride:st('stride'),speed:st('speed')};
+}
+const fv=(st,d,u)=>st?`${st.m.toFixed(d)} ${u}${st.sd!=null?` <small>±${st.sd.toFixed(d)}</small>`:''}`:'—';
+function stpHtml(s){
+  const r=stpOf(s);
+  if(!r)return s.kind==='sag'?'<div class="muted">同じ脚の初期接地を2回続けて記録すると、周期時間・歩行率を計算します（距離の基準があれば歩行速度・ストライド長も）。</div>':'';
+  const rows=r.type==='fro'?[['歩行率（ケイデンス）',fv(r.cad,0,'歩/分'),'100〜120 歩/分'],['1歩の時間',fv(r.step,2,'s'),'約0.5〜0.6 s']]
+    :[['歩行速度',fv(r.speed,2,'m/s'),'1.0 m/s 以上'],['歩行率（ケイデンス）',fv(r.cad,0,'歩/分'),'100〜120 歩/分'],['ストライド長',fv(r.stride,2,'m'),'約1.2〜1.5 m'],['1周期の時間',fv(r.cyc,2,'s'),'約1.0〜1.2 s'],[`立脚時間（${SN[s.side]}脚）`,fv(r.stance,2,'s'),'周期の約60%'],[`遊脚時間（${SN[s.side]}脚）`,fv(r.swing,2,'s'),'周期の約40%']];
+  return`<h2 style="margin-top:6px">時間・距離因子</h2><div class="tablewrap"><table class="wrapc"><thead><tr><th>項目</th><th>平均±SD</th><th>目安</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td><small>${x[2]}</small></td></tr>`).join('')}</tbody></table></div>`+
+    (r.type==='sag'?`<div class="muted">続けて記録した初期接地の間隔（${r.n}周期）と、その間の足尖離地から求めました。${s.cal?'ストライド長は踵の位置の差から求めています。':'距離の基準を設定すると歩行速度・ストライド長も表示します。'}</div>`:'<div class="muted">左右の立脚中期の間隔から求めました。</div>');
+}
+function summaryHtml(s){
+  const M=meansOf(s),cell=(k,st)=>st?`${clin(k,st.m)}${st.sd!=null?` <small>±${st.sd.toFixed(1)}</small>`:''}<br><small>n=${st.n}</small>`:'—';
+  if(s.kind==='sag')return`<table><thead><tr><th>平均±SD<br><small>（目安）</small></th>${JOINTS.map(j=>`<th><span class="jdot" style="background:var(${j.c})"></span>${j.n}</th>`).join('')}</tr></thead><tbody>${['ic','peak','to'].map(e=>`<tr><td>${EVN[e]}</td>${JOINTS.map(j=>`<td>${cell(j.k,M[e][j.k])}<br><small>${REF[e][j.k]?'目安 '+REF[e][j.k]:''}</small></td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  return`<table><thead><tr><th>平均±SD<br><small>（判定幅）</small></th>${FJ.map(j=>`<th>${j.n}</th>`).join('')}</tr></thead><tbody>${['mR','mL'].map(e=>`<tr><td>${EVN[e]}</td>${FJ.map(j=>`<td>${cell(j.k,M[e][j.k])}<br><small>${rangeTxt(j.k,RANGE.mid[j.k])}</small></td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+function findingsHtml(list,withSrc){
+  const vals=list.filter(f=>f.type==='値'),pats=list.filter(f=>f.type==='型');
+  let h='<h2 style="margin-top:6px">異常値の一覧</h2>';
+  h+=vals.length?`<div class="tablewrap"><table><thead><tr><th>${withSrc?'動画・':''}側・場面・項目</th><th>平均</th><th>判定幅</th><th>外れ</th></tr></thead><tbody>${vals.map(v=>`<tr><td>${withSrc?v.src+'・':''}${SN[v.side]}・${v.label}</td><td><b>${v.val}</b></td><td><small>${v.ref}</small></td><td><small>${v.cnt}</small></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:0">判定幅を外れた平均値はありません。</p>';
+  h+='<h2 style="margin-top:6px">異常パターンの候補</h2>';
+  h+=pats.length?`<div style="display:flex;flex-direction:column;gap:6px">${pats.map(x=>`<div class="pat"><span class="src">${withSrc?x.src+'・':''}${SN[x.side]}</span><b>${x.label}</b><span>${x.desc}</span><small>${x.cnt}で該当</small></div>`).join('')}</div>`:'<p class="muted" style="margin:0">該当するパターンはありません。</p>';
+  return h;
+}
+
+/* ---------- 記録一覧・結果 ---------- */
+function renderRecs(){
+  const s=sl();
+  if(!s.recs.length){$('recs').innerHTML='<p class="muted" style="margin:0">まだ記録はありません。動画を止めて場面のボタンを押してください。</p>';return;}
+  $('recs').innerHTML=s.recs.map(r=>{const v=recVal(s,r),miss=PDEF(s).filter(d=>!r.pts[d.k]).map(d=>d.n);
+    const vals=s.kind==='sag'?JOINTS.map(j=>`${j.s} ${clin(j.k,v[j.k])}`).join('　'):FJ.map(j=>`${j.s} ${clin(j.k,v[j.k])}`).join('　');
+    return`<div class="rec${r.use?'':' off'}">${r.img?`<img src="${r.img}" alt="">`:''}<div class="body"><b>${EVN[r.ev]}　<span class="muted">${tReal(s,r.f).toFixed(3)} 秒・コマ ${r.f}</span></b><span>${vals}</span>${miss.length?`<span class="muted">未入力：${miss.join('・')}</span>`:''}
+      <div class="row"><label><input type="checkbox" data-use="${r.id}" ${r.use?'checked':''}>採用</label><span class="grow"></span>
+      <button class="small" data-show="${r.id}" ${s.url?'':'disabled'}>表示</button><button class="small" data-edit="${r.id}" ${s.url?'':'disabled'}>修正</button><button class="small" data-del="${r.id}">削除</button></div></div></div>`;}).join('');
+  const R=id=>s.recs.find(r=>r.id===id);
+  $('recs').querySelectorAll('[data-use]').forEach(el=>el.onchange=()=>{R(el.dataset.use).use=el.checked;renderRecs();renderResults();renderReport();});
+  $('recs').querySelectorAll('[data-show]').forEach(el=>el.onclick=()=>{endMode();show(R(el.dataset.show).f);$('viewerBox').scrollIntoView({behavior:'smooth',block:'start'});});
+  $('recs').querySelectorAll('[data-edit]').forEach(el=>el.onclick=()=>{const r=R(el.dataset.edit);startDig(r.ev,r);});
+  $('recs').querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{const r=R(el.dataset.del);if(!confirm(`${EVN[r.ev]}（${tReal(s,r.f).toFixed(3)} 秒）の記録を削除しますか？`))return;s.recs.splice(s.recs.indexOf(r),1);renderSlots();renderRecs();renderResults();renderReport();if(s.url)drawView();});
+}
+function renderResults(){
+  const s=sl();$('resCard').hidden=!used(s).length;if($('resCard').hidden)return;
+  $('resTitle').textContent=`結果：${s.n}`;
+  $('summary').innerHTML=summaryHtml(s);
+  $('stp').innerHTML=stpHtml(s);
+  $('findings').innerHTML=findingsHtml(findingsOf(s),false)+'<p class="muted" style="margin:0">手動で計測した2D角度にアプリ独自の判定幅を当てはめた参考所見です。診断ではありません。記録した場面の過半数で該当したパターンだけを表示しています。</p>';
+}
+function collectAll(){
+  const all=[];SLOTS.forEach(d=>{const s=S[d.id];findingsOf(s).forEach(f=>all.push({...f,src:s.n}));});
+  const lr=[];
+  if(used(S.left).length&&used(S.right).length){const Lm=meansOf(S.left),Rm=meansOf(S.right);
+    for(const e of['ic','peak','to'])for(const j of JOINTS){const l=Lm[e][j.k],r=Rm[e][j.k];if(!l||!r)continue;const d=r.m-l.m;lr.push({e,k:j.k,l:l.m,r:r.m,d});
+      if(Math.abs(d)>LR_DIFF)all.push({type:'差',src:'左右側面',label:`${EVN[e]}・${j.n}の左右差`,val:`右 ${clin(j.k,r.m)}／左 ${clin(j.k,l.m)}`,cnt:`差 ${Math.abs(d).toFixed(1)}°`});}}
+  for(const v of['front','back']){const s=S[v];if(!used(s).length)continue;const M=meansOf(s);
+    for(const j of FJ){const r=M.mR[j.k],l=M.mL[j.k];if(r&&l&&Math.abs(r.m-l.m)>LR_DIFF)all.push({type:'差',src:s.n,label:`立脚中期・${j.n}の左右差`,val:`右 ${clin(j.k,r.m)}／左 ${clin(j.k,l.m)}`,cnt:`差 ${Math.abs(r.m-l.m).toFixed(1)}°`});}}
+  return{all,lr};
+}
+function renderReport(){
+  autosave();
+  const done=SLOTS.filter(d=>used(S[d.id]).length);
+  $('sumCard').hidden=!done.length;if(!done.length)return;
+  const{all,lr}=collectAll();
+  let h=`<div class="muted">計測済み：${done.map(d=>`${d.n}（${used(S[d.id]).length}場面）`).join('・')}</div>`;
+  const st=done.map(d=>({s:S[d.id],r:stpOf(S[d.id])})).filter(x=>x.r);
+  if(st.length)h+=`<h2>時間・距離因子</h2><div class="tablewrap"><table class="wrapc"><thead><tr><th>項目</th>${st.map(x=>`<th>${x.s.n}</th>`).join('')}</tr></thead><tbody>${[
+    ['歩行速度',r=>r.speed?r.speed.m.toFixed(2)+' m/s':'—'],['歩行率',r=>r.cad?r.cad.m.toFixed(0)+' 歩/分':'—'],['ストライド長',r=>r.stride?r.stride.m.toFixed(2)+' m':'—'],
+    ['1周期の時間',r=>r.cyc?r.cyc.m.toFixed(2)+' s':'—'],['撮影側の脚の立脚時間',r=>r.stance?r.stance.m.toFixed(2)+' s':'—'],['撮影側の脚の遊脚時間',r=>r.swing?r.swing.m.toFixed(2)+' s':'—']
+  ].map(([n,fn])=>`<tr><td>${n}</td>${st.map(x=>`<td>${fn(x.r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  if(lr.length)h+=`<h2>矢状面の左右比較</h2><div class="tablewrap"><table><thead><tr><th>場面・関節</th><th>右</th><th>左</th><th>差</th></tr></thead><tbody>${lr.map(x=>`<tr><td>${EVN[x.e]}・${JK[x.k].n}</td><td>${clin(x.k,x.r)}</td><td>${clin(x.k,x.l)}</td><td class="${Math.abs(x.d)>LR_DIFF?'diff':''}">${Math.abs(x.d).toFixed(1)}°</td></tr>`).join('')}</tbody></table></div><div class="muted">差が${LR_DIFF}°を超える項目を強調表示しています。</div>`;
+  else if(used(S.left).length||used(S.right).length)h+='<div class="muted">左右の側面を両方計測すると、左右比較を表示します。</div>';
+  for(const v of['front','back']){const s=S[v];if(!used(s).length)continue;const M=meansOf(s);
+    h+=`<h2>前額面（${s.n}）</h2><div class="tablewrap"><table><thead><tr><th>項目</th><th>右立脚中期</th><th>左立脚中期</th></tr></thead><tbody>${FJ.map(j=>`<tr><td>${j.n}</td><td>${M.mR[j.k]?clin(j.k,M.mR[j.k].m):'—'}</td><td>${M.mL[j.k]?clin(j.k,M.mL[j.k].m):'—'}</td></tr>`).join('')}</tbody></table></div>`;}
+  const diffs=all.filter(f=>f.type==='差');
+  h+=findingsHtml(all.filter(f=>f.type!=='差'),true);
+  h+='<h2 style="margin-top:6px">左右差</h2>'+(diffs.length?`<div style="display:flex;flex-direction:column;gap:6px">${diffs.map(x=>`<div class="pat"><span class="src">${x.src}</span><b>${x.label}</b><span>${x.val}</span><small>${x.cnt}</small></div>`).join('')}</div>`:`<p class="muted" style="margin:0">${LR_DIFF}°を超える左右差はありません。</p>`);
+  h+='<p class="muted" style="margin:0">手動で計測した2D角度にアプリ独自の判定幅を当てはめた参考所見です。診断ではありません。</p>';
+  $('report').innerHTML=h;
+}
+
+/* ---------- 出力 ---------- */
+const qv=v=>{if(v==null||(typeof v==='number'&&!isFinite(v)))return'';const s=String(v);return/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+const toCsv=rows=>rows.map(r=>r.map(qv).join(',')).join('\r\n');
+const r3=v=>v==null?null:+v.toFixed(3);
+function download(name,data,type){
+  const b=data instanceof Blob?data:new Blob([type?data:'﻿'+data],{type:type||'text/csv'});const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+}
+function allRows(){
+  readP();
+  const rows=[['Gait Tester 手動デジタイズ版 総合結果',new Date().toLocaleString('ja-JP')],...PF.filter(k=>P[k]).map(k=>[PL[k],P[k]]),['符号','体幹:前傾+ 股・膝:屈曲+ 足関節:背屈+ ／ 骨盤:遊脚側下制+ 体幹側屈:立脚側+ 膝:外反+'],[]];
+  SLOTS.forEach(d=>{const s=S[d.id];if(!s.recs.length)return;
+    rows.push([`■ ${s.n}`,s.name,`撮影fps ${s.capFps}`,s.cal?`距離の基準 ${s.cal.m} m`:'']);
+    const defs=PDEF(s),js=s.kind==='sag'?JOINTS:FJ;
+    rows.push(['場面','採用','時刻_s','コマ',...js.map(j=>j.n+'_'+j.pos+'+'),...js.map(j=>j.n+'_表記'),...defs.flatMap(p=>[p.n+'_x',p.n+'_y'])]);
+    s.recs.forEach(r=>{const v=recVal(s,r);rows.push([EVN[r.ev],r.use?1:0,r3(tReal(s,r.f)),r.f,...js.map(j=>r3(v[j.k])),...js.map(j=>clin(j.k,v[j.k])),...defs.flatMap(p=>r.pts[p.k]?[r.pts[p.k][0],r.pts[p.k][1]]:[null,null])]);});
+    const M=meansOf(s);rows.push(['場面','n',...js.flatMap(j=>[j.n+'_平均',j.n+'_SD'])]);
+    EVS[s.kind].forEach(e=>{const n=Math.max(0,...js.map(j=>M[e.k][j.k]?M[e.k][j.k].n:0));rows.push([EVN[e.k]+'（平均）',n,...js.flatMap(j=>M[e.k][j.k]?[r3(M[e.k][j.k].m),r3(M[e.k][j.k].sd)]:[null,null])]);});
+    const t=stpOf(s);if(t)rows.push(['時間・距離因子','歩行速度_m/s',t.speed?r3(t.speed.m):null,'歩行率_歩/分',t.cad?r3(t.cad.m):null,'ストライド長_m',t.stride?r3(t.stride.m):null,'立脚時間_s',t.stance?r3(t.stance.m):null]);
+    rows.push([]);
+  });
+  const{all,lr}=collectAll();
+  if(lr.length){rows.push(['■ 矢状面の左右比較'],['場面','関節','右','左','差']);lr.forEach(x=>rows.push([EVN[x.e],JK[x.k].n,clin(x.k,x.r),clin(x.k,x.l),r3(Math.abs(x.d))]));rows.push([]);}
+  rows.push(['■ 所見一覧'],['種類','動画','側','内容','値・基準','該当']);
+  all.forEach(f=>rows.push([f.type==='値'?'異常値':f.type==='型'?'異常パターン候補':'左右差',f.src,f.side?SN[f.side]:'',f.label,f.type==='型'?f.desc:f.type==='値'?`${f.val}（判定幅 ${f.ref}）`:f.val,f.cnt]));
+  return rows;
+}
+$('xAll').onclick=()=>download(`GaitTester_手動_${stamp()}.csv`,toCsv(allRows()));
+$('xCopy').onclick=async()=>{const txt=allRows().map(r=>r.map(v=>v??'').join('\t')).join('\n');
+  try{await navigator.clipboard.writeText(txt);$('xCopy').textContent='コピーしました';setTimeout(()=>$('xCopy').textContent='総合結果をコピー',1500);}
+  catch(e){const ta=$('copyArea');ta.hidden=false;ta.value=txt;ta.select();}};
+$('xPrint').onclick=async()=>{
+  endMode();stopPlay();readP();
+  let h=`<h1>歩行解析レポート（手動計測）</h1><div class="muted">Gait Tester 手動デジタイズ版　作成：${new Date().toLocaleString('ja-JP')}</div>`;
+  const pr=PF.filter(k=>k!=='memo'&&P[k]);
+  if(pr.length||P.memo)h+=`<h2>対象者・検査情報</h2><div class="tablewrap"><table><tbody>${pr.map(k=>`<tr><th style="text-align:left;width:9em">${PL[k]}</th><td style="text-align:left">${esc(P[k])}</td></tr>`).join('')}${P.memo?`<tr><th style="text-align:left">メモ</th><td style="text-align:left;white-space:pre-wrap">${esc(P.memo)}</td></tr>`:''}</tbody></table></div>`;
+  h+=$('report').innerHTML;
+  for(const d of SLOTS){const s=S[d.id];if(!used(s).length)continue;
+    h+=`<h2>${s.n}の詳細</h2><div class="muted">${esc(s.name)}・${s.capFps} fps</div><div class="tablewrap">${summaryHtml(s)}</div>`+stpHtml(s).replace(/<h2[^>]*>.*?<\/h2>/,'');
+    const snaps=used(s).filter(r=>r.img).slice(0,8);
+    if(snaps.length)h+=`<div class="snaps">${snaps.map(r=>{const v=recVal(s,r);return`<figure><img src="${r.img}" alt=""><figcaption><b>${EVN[r.ev]}</b> ${tReal(s,r.f).toFixed(2)} s<br>${(s.kind==='sag'?JOINTS:FJ).map(j=>j.s+' '+clin(j.k,v[j.k])).join(' ')}</figcaption></figure>`;}).join('')}</div>`;}
+  $('printArea').innerHTML=h;
+  await Promise.all([...$('printArea').querySelectorAll('img')].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
+  window.print();
+};
+
+/* ---------- 保存・復元 ---------- */
+const DB={
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('gaittester-manual',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});},
+  async tx(mode,fn){const db=await this.open();return new Promise((res,rej)=>{const t=db.transaction('kv',mode),q=fn(t.objectStore('kv'));t.oncomplete=()=>{db.close();res(q&&q.result);};t.onerror=t.onabort=()=>{db.close();rej(t.error);};});},
+  get(k){return this.tx('readonly',st=>st.get(k));},set(k,v){return this.tx('readwrite',st=>st.put(v,k));},del(k){return this.tx('readwrite',st=>st.delete(k));}
+};
+const hasData=()=>SLOTS.some(d=>S[d.id].recs.length);
+function projectData(){
+  readP();const slots={};
+  SLOTS.forEach(d=>{const s=S[d.id];if(!s.recs.length&&!s.cal)return;
+    slots[d.id]={name:s.name,fileFps:s.fileFps,capFps:s.capFps,dir:s.dir,vw:s.vw,vh:s.vh,cal:s.cal,recs:s.recs};});
+  return{format:'gaittester-manual-v1',saved:new Date().toISOString(),patient:{...P},slots};
+}
+function loadProject(j){
+  endMode();stopPlay();
+  P={...(j.patient||{})};writeP();
+  SLOTS.forEach(d=>{const s=S[d.id];if(s.url)URL.revokeObjectURL(s.url);
+    Object.assign(s,{blob:null,url:null,name:'',vw:0,vh:0,nFrames:0,fileFps:30,capFps:30,dir:'auto',cal:null,recs:[],cur:0});
+    const o=j.slots&&j.slots[d.id];if(!o)return;
+    Object.assign(s,{name:o.name||'',fileFps:o.fileFps||30,capFps:o.capFps||30,dir:o.dir||'auto',vw:o.vw||0,vh:o.vh||0,cal:o.cal||null,
+      recs:(Array.isArray(o.recs)?o.recs:[]).filter(r=>r&&Number.isInteger(r.f)&&EVS[s.kind].some(e=>e.k===r.ev)&&r.pts&&typeof r.pts==='object').map(r=>({id:r.id||uid(),f:r.f,ev:r.ev,pts:r.pts,use:r.use!==false,img:typeof r.img==='string'&&r.img.startsWith('data:image/')?r.img:null}))});});
+  vid.removeAttribute('src');vid.dataset.slot='';
+  const first=SLOTS.find(d=>S[d.id].recs.length);
+  selectSlot(first?first.id:'left');renderReport();
+}
+let asTimer=null,asReady=false;
+function autosave(){if(!asReady||!('indexedDB' in window))return;clearTimeout(asTimer);
+  asTimer=setTimeout(()=>{readP();(hasData()||PF.some(k=>P[k])?DB.set('autosave',projectData()):DB.del('autosave')).catch(()=>{});},1200);}
+$('bSaveProj').onclick=()=>{readP();download(`GaitTester_手動_${(P.pid||P.pname||'計測').replace(/[\\/:*?"<>|\s]+/g,'_')}_${stamp()}.json`,JSON.stringify(projectData()),'application/json');};
+$('projIn').addEventListener('change',e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();
+  r.onload=()=>{let j;try{j=JSON.parse(r.result);}catch(err){$('status').innerHTML='<span class="err">ファイルを読み込めませんでした（JSONの形式ではありません）。</span>';return;}
+    if(!j||j.format!=='gaittester-manual-v1'){$('status').innerHTML=`<span class="err">${j&&j.format==='gaittester-project-v1'?'これはAI版の解析データです。AI版の「解析データを開く」から開いてください。':'Gait Tester 手動版の計測データではありません。'}</span>`;return;}
+    if(hasData()&&!confirm('いまの計測を閉じて、ファイルの計測データを開きますか？'))return;
+    asReady=true;$('restoreBar').hidden=true;loadProject(j);
+    $('status').textContent=`計測データを開きました（${new Date(j.saved).toLocaleString('ja-JP')} 保存）。同じ名前の動画を枠に入れると続けて計測できます。`;};
+  r.readAsText(f);
+});
+$('bNew').onclick=()=>{
+  if((hasData()||PF.some(k=>P[k]))&&!confirm('いまの計測と対象者情報を消して、新しい検査を始めますか？（保存していない内容は失われます）'))return;
+  asReady=true;$('restoreBar').hidden=true;loadProject({});P={};writeP();DB.del('autosave').catch(()=>{});
+  $('status').textContent='新しい検査を始めました。';
+};
+async function checkAutosave(){
+  let j=null;try{if('indexedDB' in window)j=await DB.get('autosave');}catch(e){}
+  if(!j||j.format!=='gaittester-manual-v1'||hasData()){asReady=true;return;}
+  const names=SLOTS.filter(d=>j.slots&&j.slots[d.id]&&j.slots[d.id].recs&&j.slots[d.id].recs.length).map(d=>`${d.n}${j.slots[d.id].recs.length}場面`);
+  const who=j.patient&&(j.patient.pid||j.patient.pname);
+  $('restoreTxt').textContent=`前回の計測が残っています（${new Date(j.saved).toLocaleString('ja-JP')}${who?'・'+who:''}${names.length?'・'+names.join('・'):''}）。新しく計測すると上書きされます。`;
+  $('restoreBar').hidden=false;
+  $('bRestore').onclick=()=>{asReady=true;$('restoreBar').hidden=true;loadProject(j);$('status').textContent='前回の計測を復元しました。同じ名前の動画を枠に入れると続けて計測できます。';};
+  $('bDiscard').onclick=()=>{asReady=true;$('restoreBar').hidden=true;DB.del('autosave').catch(()=>{});};
+}
+window.addEventListener('beforeunload',e=>{if(mode&&mode.type==='dig'){e.preventDefault();e.returnValue='';}});
+let rzT=null;window.addEventListener('resize',()=>{clearTimeout(rzT);rzT=setTimeout(()=>{if(sl().vw&&sl().url)drawView();},150);});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+selectSlot('left');checkAutosave();
+window.__manual={S,recVal,stpOf,meansOf,findingsOf,projectData,loadProject,selectSlot,renderReport};
+</script>
+</body>
+</html>

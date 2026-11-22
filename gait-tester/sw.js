@@ -1,9 +1,9 @@
 // Gait Tester service worker
 // ・アプリ本体：ネット優先（新しい版があれば使い、電波がないときは保存済みを使う）
 // ・AI（MediaPipe のライブラリ・WASM・モデル）：一度読み込んだら保存したものを使う（オフラインで解析できる）
-const SHELL_CACHE = "gt-shell-v2";
+const SHELL_CACHE = "gt-shell-v3";
 const AI_CACHE = "gt-ai-v1";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
+const SHELL = ["./", "./index.html", "./manual.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 const AI_HOSTS = ["cdn.jsdelivr.net", "storage.googleapis.com"];
 
 self.addEventListener("install", e => {
