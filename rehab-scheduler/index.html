@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>リハビリ予定 自動作成</title>
+<style>
+:root{
+  --bg:#f3f5f8;--panel:#fff;--line:#d9dee6;--line2:#eceff4;--text:#1d2733;--muted:#687586;
+  --accent:#2563eb;--accent2:#1d4ed8;--danger:#dc2626;--ok:#15803d;--warn:#b45309;
+  --pt:#dbeafe;--ptb:#2563eb;--ot:#dcfce7;--otb:#15803d;--st:#fef3c7;--stb:#b45309;
+  --na:#eef0f3;--brk:#e3e6eb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 "Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif}
+header{background:#1e293b;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:17px;margin:0;font-weight:700}
+header .sub{font-size:12px;color:#cbd5e1}
+nav{display:flex;gap:2px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line);padding:0 8px;position:sticky;top:0;z-index:20}
+nav button{border:0;background:none;padding:10px 14px;font-size:14px;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent}
+nav button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+main{padding:14px 16px 60px;max-width:100%}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px}
+.card h3{font-size:14px;margin:12px 0 6px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:minmax(320px,440px) 1fr;gap:14px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+label.f{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:3px}
+input,select,textarea{font:inherit;font-size:13px;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--text)}
+input[type=checkbox]{width:16px;height:16px}
+button.b{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--text)}
+button.b:hover{background:#f1f5f9}
+button.p{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+button.p:hover{background:var(--accent2)}
+button.big{font-size:15px;padding:10px 20px}
+button.d{color:var(--danger);border-color:#fca5a5}
+button.s{padding:2px 8px;font-size:12px;white-space:nowrap}
+.muted{color:var(--muted)}.small{font-size:12px}
+.ok{color:var(--ok)}.ng{color:var(--danger)}.warn{color:var(--warn)}
+table.t{border-collapse:collapse;width:100%;font-size:13px}
+table.t th,table.t td{border-bottom:1px solid var(--line2);padding:4px 6px;text-align:left;vertical-align:middle}
+table.t th{background:#f8fafc;position:sticky;top:0;z-index:1;font-weight:600;white-space:nowrap}
+table.t td.num,table.t th.num{text-align:right}
+.scroll{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:6px}
+.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;font-weight:700;line-height:18px}
+.tag.PT{background:var(--pt);color:var(--ptb)}.tag.OT{background:var(--ot);color:var(--otb)}.tag.ST{background:var(--st);color:var(--stb)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;margin:1px 2px;border-radius:10px;font-size:12px;border:1px solid var(--line);background:#fff;white-space:nowrap}
+.chip.PT{background:var(--pt);border-color:#bfdbfe}.chip.OT{background:var(--ot);border-color:#bbf7d0}.chip.ST{background:var(--st);border-color:#fde68a}
+.chip.off{background:#f1f5f9;color:#94a3b8;text-decoration:line-through}
+.chip.tog{cursor:pointer;user-select:none}
+.bar{height:10px;background:#e5e7eb;border-radius:5px;overflow:hidden;min-width:120px}
+.bar>i{display:block;height:100%;background:var(--accent)}
+.bar>i.over{background:var(--danger)}
+/* schedule grid */
+.sg{border-collapse:separate;border-spacing:0;font-size:11px;table-layout:fixed}
+.sg th,.sg td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);height:34px;padding:0;text-align:center}
+.sg thead th{background:#f8fafc;position:sticky;top:0;z-index:3;height:24px;font-weight:600;width:46px;min-width:46px}
+.sg .nm{position:sticky;left:0;background:#fff;z-index:2;text-align:left;padding:0 6px;width:150px;min-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.sg thead .nm{z-index:4;background:#f8fafc}
+.sg td.free{background:#fff}
+.sg td.na{background:var(--na)}
+.sg td.brk{background:var(--brk)}
+.sg tr.absent .nm{color:#94a3b8}
+.sg td.over{outline:2px dashed var(--accent);outline-offset:-2px;background:#eff6ff}
+.ses{display:block;margin:2px;border-radius:5px;padding:1px 3px;height:28px;overflow:hidden;cursor:grab;line-height:13px;text-align:left;border-left:4px solid}
+.ses.PT{background:var(--pt);border-color:var(--ptb)}.ses.OT{background:var(--ot);border-color:var(--otb)}.ses.ST{background:var(--st);border-color:var(--stb)}
+.ses .pn{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.ses .pr{color:#475569;white-space:nowrap;overflow:hidden;display:block}
+.ses.lock{box-shadow:inset 0 0 0 2px #7c3aed}
+.ses.alt .pn::after{content:" *";color:var(--danger)}
+.unbox{max-height:160px;overflow:auto;border:1px dashed #94a3b8;border-radius:6px;padding:6px;background:#fafafa}
+.unbox.over{background:#fee2e2}
+.uitem{cursor:grab}
+.legend span{margin-right:10px}
+.stat{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.stat div{background:#f8fafc;border:1px solid var(--line2);border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:20px}
+.notice{background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;font-size:13px;margin-bottom:10px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:100;max-width:90vw}
+#toast.on{opacity:.95}
+#busy{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;align-items:center;justify-content:center;z-index:90;color:#fff;font-size:18px;font-weight:700}
+#busy.on{display:flex}
+dialog{border:1px solid var(--line);border-radius:10px;padding:16px;min-width:300px;max-width:520px}
+dialog::backdrop{background:rgba(15,23,42,.35)}
+.mt input,.mt select{width:100%;padding:3px 4px;font-size:12px}
+.mt td{padding:2px 3px}
+.help{font-size:12px;color:var(--muted);margin:4px 0 0}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px 14px}
+.pat{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;margin-bottom:6px}
+.pat.cur{border-color:var(--accent);background:#eff6ff}
+.pat .nm{flex:1;font-weight:600}
+.wardh{background:#f1f5f9;font-weight:700}
+@media print{
+  header,nav,.noprint,#toast{display:none!important}
+  body{background:#fff;font-size:11px}
+  main{padding:0}
+  .card{border:0;padding:0;margin:0 0 8px}
+  .scroll{max-height:none;overflow:visible;border:0}
+  .sg .nm,.sg thead th,table.t th{position:static}
+  .ses{border:1px solid #999;border-left-width:4px}
+  @page{size:A4 landscape;margin:8mm}
+  tr{page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>リハビリ予定 自動作成</h1>
+  <span class="sub">オフライン動作・データはこのブラウザ内に自動保存されます</span>
+</header>
+<nav id="tabs"></nav>
+<main id="main"></main>
+<div id="toast"></div>
+<div id="busy">計算中…</div>
+<dialog id="dlg"></dialog>
+<input type="file" id="file" hidden>
+
+<script>
+'use strict';
+/* ================= 定数・ユーティリティ ================= */
+const WD='日月火水木金土';
+const DISC=['PT','OT','ST'];
+const LS_KEY='rehabScheduler.v1';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const z2h=s=>String(s==null?'':s).replace(/[０-９：－～〜]/g,c=>c==='：'?':':(c==='－'?'-':(c==='～'||c==='〜')?'-':String.fromCharCode(c.charCodeAt(0)-0xFEE0)));
+const toMin=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(z2h(s).trim());return m?(+m[1])*60+(+m[2]):NaN};
+const toMinOr=(s,d)=>{const v=toMin(s);return isNaN(v)?d:v};
+const fmt=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const overlap=(a,b,rs)=>rs.some(r=>a<r[1]&&b>r[0]);
+function parseRanges(str){
+  return z2h(str).split(/[,、;；\s]+/).map(x=>x.trim()).filter(Boolean).map(x=>{const [a,b]=x.split('-');return [toMin(a),toMin(b)]}).filter(r=>!isNaN(r[0])&&!isNaN(r[1])&&r[1]>r[0]);
+}
+const splitList=s=>z2h(s).split(/[,、;；\s]+/).map(x=>x.trim()).filter(Boolean).map(normDate);
+function normDate(s){const m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/.exec(s);return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:s}
+function parseDate(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
+function ymd(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function addDays(s,n){const d=parseDate(s);d.setDate(d.getDate()+n);return ymd(d)}
+function mondayOf(s){const d=parseDate(s);const w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);return ymd(d)}
+function mdw(s){const d=parseDate(s);return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`}
+const truthy=v=>/^(1|true|yes|y|○|〇|✓|休|休み|はい|on)$/i.test(String(v==null?'':v).trim());
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2600)}
+function busy(on){$('#busy').classList.toggle('on',on)}
+function download(name,text,type){
+  const blob=new Blob([type==='json'?text:'﻿'+text],{type:type==='json'?'application/json':'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+
+/* ================= 初期データ ================= */
+function defaultSettings(){return{
+  start:'09:00',end:'17:00',unit:20,breaks:'12:00-13:00',
+  ptMax:9,thMax:21,thWeekMax:108,
+  continuous:true,blockMax:3,allowSplit:true,maxConsec:6,minGap:0,
+  tanto:'prefer',strategy:'priority',minGuarantee:1,cap:0,minPriority:3,
+  timeBias:'spread',balance:1,iterations:12,randomness:3
+}}
+function builtinPatterns(){return[
+  {name:'平日標準',note:'通常の平日体制',settings:defaultSettings(),absentTh:null,pausedPt:null},
+  {name:'土曜（短縮）',note:'16時まで・1職種2単位まで',settings:{...defaultSettings(),end:'16:00',cap:2},absentTh:null,pausedPt:null},
+  {name:'日祝（最小体制）',note:'15時まで・1職種1単位・優先度1〜2のみ・均等配分',settings:{...defaultSettings(),end:'15:00',cap:1,minPriority:2,strategy:'equal'},absentTh:null,pausedPt:null},
+  {name:'人員不足（均等配分）',note:'全員に最低1単位を保証してから残りを配分',settings:{...defaultSettings(),strategy:'equal',minGuarantee:1},absentTh:null,pausedPt:null},
+  {name:'午前のみ',note:'行事・研修日など午前だけ実施',settings:{...defaultSettings(),end:'12:00',breaks:'',cap:2},absentTh:null,pausedPt:null},
+]}
+function sampleData(){
+  const r=mulberry32(20261122), pick=a=>a[Math.floor(r()*a.length)];
+  const sn=['佐藤','鈴木','高橋','田中','伊藤','渡辺','山本','中村','小林','加藤','吉田','山田','佐々木','山口','松本','井上','木村','林','斎藤','清水','山崎','森','池田','橋本','阿部','石川','山下','中島','石井','小川','前田','岡田','長谷川','藤田','後藤','近藤','村上','遠藤','青木','坂本','西村','福田','太田','三浦','藤井','岡本','松田','中川'];
+  const gn=['太郎','花子','一郎','和子','茂','幸子','博','節子','誠','洋子','明','久美子','実','恵子','勇','美智子','清','京子','正雄','順子','浩','裕子','進','智子','修','由美子','健一','直子','隆','明美'];
+  const tg=['翔太','美咲','大輔','彩','健太','愛','拓也','舞','亮','奈々','陽介','沙織','悠斗','千尋','航','真由'];
+  const therapists=[];
+  const mk=(disc,cnt)=>{for(let i=1;i<=cnt;i++){
+    const short=i%8===0;
+    therapists.push({id:disc+String(i).padStart(2,'0'),name:pick(sn)+' '+pick(tg),disc,
+      start:short?'09:00':'08:30',end:short?'13:00':'17:30',
+      offDays:['日土','日月','日火','日水','日木','日金','土月','土木','水金','火木'][i%10],offDates:'',ng:i%5===0?'16:00-16:40':'',max:'',absent:false,note:short?'短時間勤務':''});
+  }};
+  mk('PT',30);mk('OT',20);mk('ST',8);
+  const byDisc=d=>therapists.filter(t=>t.disc===d);
+  const wards=['2A','2B','3A','3B','4A','4B'];
+  const patients=[];const rr={PT:0,OT:0,ST:0};
+  for(let i=1;i<=300;i++){
+    const w=wards[Math.floor((i-1)/50)];
+    const x=r();
+    const pt=r()<0.9?(x<0.25?1:(x<0.8?2:3)):0;
+    const ot=r()<0.62?(r()<0.3?1:2):0;
+    const st=r()<0.25?(r()<0.5?1:2):0;
+    const tan=d=>{const L=byDisc(d);const t=L[rr[d]++%L.length];return t.id};
+    const ngs=[];if(r()<0.2)ngs.push(pick(['10:00-10:40','14:00-14:40','15:00-15:40']));if(r()<0.05)ngs.push('09:00-13:00');if(r()<0.06)ngs.push('13:20-14:00');
+    patients.push({id:'P'+String(i).padStart(3,'0'),name:pick(sn)+' '+pick(gn),ward:w,room:String(parseInt(w)*100+((i-1)%50>>2)+1),
+      pt,ot,st,tPT:pt?tan('PT'):'',tOT:ot?tan('OT'):'',tST:st?tan('ST'):'',
+      days:r()<0.7?'月火水木金土日':'月火水木金土',ng:ngs.join(','),prefer:r()<0.1?'午前':(r()<0.1?'午後':''),
+      priority:String(r()<0.2?1:(r()<0.75?2:3)),paused:r()<0.02,offDates:'',note:''});
+  }
+  return {therapists,patients};
+}
+function defaultState(){
+  const s=sampleData();
+  const today=ymd(new Date());
+  return{
+    settings:defaultSettings(),therapists:s.therapists,patients:s.patients,
+    patterns:builtinPatterns(),curPattern:'平日標準',
+    gen:{start:today,days:1,wdPattern:{0:'日祝（最小体制）',6:'土曜（短縮）'},holidays:'',holidayPattern:'日祝（最小体制）'},
+    result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,mq:'',mWard:'',tmDisc:''},sample:true
+  };
+}
+let state;
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(LS_KEY));if(s&&s.patients){s.settings={...defaultSettings(),...s.settings};s.ui={...defaultState().ui,...s.ui};return s}}catch(e){}
+  return null;
+}
+let saveTimer=null;
+function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){toast('自動保存に失敗しました（容量不足の可能性）。JSONで書き出してください')}},300)}
+
+/* ================= スケジューラ本体 ================= */
+function frame(date,S){
+  const u=Math.max(5,+S.unit||20),t0=toMin(S.start),t1=toMin(S.end);
+  const n=(isNaN(t0)||isNaN(t1))?0:Math.max(0,Math.floor((t1-t0)/u));
+  const times=Array.from({length:n},(_,i)=>t0+i*u);
+  const br=parseRanges(S.breaks);
+  const isBreak=times.map(t=>overlap(t,t+u,br));
+  const wdi=parseDate(date).getDay();
+  return{date,S,u,t0,t1,n,times,isBreak,wdi,wd:WD[wdi]};
+}
+function thWorks(th,F,absentSet){
+  if(absentSet?absentSet.has(th.id):!!th.absent)return false;
+  if((th.offDays||'').includes(F.wd))return false;
+  if(splitList(th.offDates).includes(F.date))return false;
+  return true;
+}
+function thAvail(th,F){const s=toMinOr(th.start,F.t0),e=toMinOr(th.end,F.t1),ng=parseRanges(th.ng);return F.times.map((t,i)=>!F.isBreak[i]&&t>=s&&t+F.u<=e&&!overlap(t,t+F.u,ng))}
+function ptInactive(p,F,pausedSet){
+  if(pausedSet?pausedSet.has(p.id):!!p.paused)return'休止';
+  const days=(p.days||'').trim();if(days&&!days.includes(F.wd))return'実施曜日外';
+  if(splitList(p.offDates).includes(F.date))return'休止日';
+  if((+p.priority||2)>(+F.S.minPriority||3))return'優先度対象外';
+  return'';
+}
+function ptAvail(p,F){const ng=parseRanges(p.ng);return F.times.map((t,i)=>!F.isBreak[i]&&!overlap(t,t+F.u,ng))}
+function ptUnits(p,S){
+  const u={};DISC.forEach(d=>{let v=Math.max(0,parseInt(z2h(p[d.toLowerCase()]))||0);if(+S.cap>0)v=Math.min(v,+S.cap);u[d]=v});
+  const mx=+S.ptMax||0;
+  if(mx>0){let sum;while((sum=DISC.reduce((a,d)=>a+u[d],0))>mx){const d=DISC.reduce((a,b)=>u[b]>u[a]?b:a);u[d]--}}
+  return u;
+}
+function makeCtx(date,S,absentSet,pausedSet){
+  const F=frame(date,S);
+  const ths=state.therapists.filter(th=>DISC.includes(th.disc)&&thWorks(th,F,absentSet)).map(th=>({id:th.id,disc:th.disc,avail:thAvail(th,F),max:(+th.max>0?+th.max:+S.thMax)||999}));
+  const pts=[],excluded={};
+  state.patients.forEach(p=>{
+    const why=ptInactive(p,F,pausedSet);if(why){excluded[p.id]=why;return}
+    const units=ptUnits(p,S);if(!DISC.some(d=>units[d]>0))return;
+    const avail=ptAvail(p,F);
+    pts.push({id:p.id,prio:+p.priority||2,prefer:p.prefer||'',tanto:{PT:p.tPT||'',OT:p.tOT||'',ST:p.tST||''},avail,units,free:avail.filter(Boolean).length});
+  });
+  return{F,S,n:F.n,ths,pts,excluded};
+}
+function solveOnce(ctx,pre,weekLoad,rng){
+  const {n,S,F}=ctx;
+  const thIdx=new Map(ctx.ths.map((t,i)=>[t.id,i]));
+  const ptIdx=new Map(ctx.pts.map((p,i)=>[p.id,i]));
+  const thOcc=ctx.ths.map(()=>new Int32Array(n).fill(-1));
+  const ptOcc=ctx.pts.map(()=>new Int32Array(n).fill(-1));
+  const dayLoad=new Array(ctx.ths.length).fill(0);
+  const sessions=[],reasons={},discTh=new Map(),groupSess=new Map();
+  const remaining=ctx.pts.map(p=>({...p.units}));
+  const rnd=+S.randomness||0,bal=(+S.balance||0)*0.5,blockMax=Math.max(1,+S.blockMax||1),minGap=Math.max(0,+S.minGap||0),maxConsec=Math.max(0,+S.maxConsec||0);
+  const place=(pi,ti,disc,s,len,locked)=>{
+    const id=sessions.length;sessions.push({p:ctx.pts[pi].id,t:ctx.ths[ti].id,disc,s,len,locked:!!locked});
+    for(let k=0;k<len;k++){thOcc[ti][s+k]=id;ptOcc[pi][s+k]=id}
+    dayLoad[ti]+=len;discTh.set(pi+'|'+disc,ti);return id;
+  };
+  let dropped=0;
+  for(const L of pre){
+    const pi=ptIdx.get(L.p),ti=thIdx.get(L.t);
+    if(pi==null||ti==null||L.s<0||L.s+L.len>n){dropped++;continue}
+    let ok=true;for(let k=0;k<L.len;k++)if(thOcc[ti][L.s+k]>=0||ptOcc[pi][L.s+k]>=0)ok=false;
+    if(!ok){dropped++;continue}
+    place(pi,ti,L.disc,L.s,L.len,L.locked);remaining[pi][L.disc]=Math.max(0,(remaining[pi][L.disc]||0)-L.len);
+  }
+  // 要求を作る
+  const reqs=[];let g=0;
+  ctx.pts.forEach((p,pi)=>DISC.forEach(d=>{
+    let u=remaining[pi][d];if(!u)return;
+    const chunks=[];
+    if(S.continuous){while(u>0){const c=Math.min(blockMax,u);chunks.push(c);u-=c}}else{for(;u>0;u--)chunks.push(1)}
+    chunks.forEach((c,ci)=>{
+      const base={pi,d,prio:p.prio,free:p.free,r:rng()};
+      if(S.strategy==='equal'){
+        const gq=Math.max(1,+S.minGuarantee||1);
+        if(ci===0&&c>gq){const gid=++g;reqs.push({...base,len:gq,stage:0,gid});reqs.push({...base,len:c-gq,stage:1,join:gid})}
+        else reqs.push({...base,len:c,stage:ci===0?0:1});
+      }else reqs.push({...base,len:c,stage:0});
+    });
+  }));
+  reqs.sort((a,b)=>a.stage-b.stage||a.prio-b.prio||(S.strategy==='equal'?0:b.len-a.len)||a.free-b.free||a.r-b.r);
+  const halfDay=12*60;
+  const tryPlace=r=>{
+    const p=ctx.pts[r.pi],pa=p.avail,po=ptOcc[r.pi],len=r.len;
+    const tantoTi=p.tanto[r.d]?thIdx.get(p.tanto[r.d]):undefined;
+    let cands=[];for(let i=0;i<ctx.ths.length;i++)if(ctx.ths[i].disc===r.d)cands.push(i);
+    if(!cands.length)return'出勤している'+r.d+'がいない';
+    if(S.tanto==='strict'&&tantoTi!==undefined)cands=[tantoTi];
+    let best=-Infinity,bt=-1,bs=-1,capOk=false,dayOk=false;
+    const prevTi=discTh.get(r.pi+'|'+r.d);
+    const G=r.join?groupSess.get(r.join):undefined,GS=G!=null?sessions[G]:null;
+    for(const ti of cands){
+      const T=ctx.ths[ti];
+      if(dayLoad[ti]+len>T.max)continue;
+      dayOk=true;
+      if((weekLoad[T.id]||0)+dayLoad[ti]+len>(+S.thWeekMax||9999))continue;
+      capOk=true;
+      const to=thOcc[ti],ta=T.avail;
+      for(let s=0;s+len<=n;s++){
+        let ok=true;
+        for(let k=0;k<len;k++){const x=s+k;if(!ta[x]||to[x]>=0||!pa[x]||po[x]>=0){ok=false;s=x;break}}
+        if(!ok)continue;
+        if(minGap>0){
+          for(let q=1;q<=minGap&&ok;q++){
+            const a=s-q,b=s+len-1+q;
+            if(a>=0&&po[a]>=0&&sessions[po[a]].disc!==r.d)ok=false;
+            if(b<n&&po[b]>=0&&sessions[po[b]].disc!==r.d)ok=false;
+          }
+          if(!ok)continue;
+        }
+        if(maxConsec>0){
+          let l=0;for(let x=s-1;x>=0&&po[x]>=0;x--)l++;
+          let rr=0;for(let x=s+len;x<n&&po[x]>=0;x++)rr++;
+          if(l+len+rr>maxConsec)continue;
+        }
+        let sc=rng()*rnd;
+        if(S.tanto!=='ignore'&&ti===tantoTi)sc+=60;
+        if(prevTi===ti)sc+=25;
+        if(GS){if(GS.t===T.id&&(GS.s+GS.len===s||s+len===GS.s))sc+=120;else if(GS.t===T.id)sc+=20}
+        sc-=dayLoad[ti]*bal;
+        const st=F.times[s],en=st+len*F.u;
+        if(p.prefer==='午前'){sc+=en<=halfDay?15:-15}else if(p.prefer==='午後'){sc+=st>=halfDay?15:-15}
+        if((s>0&&to[s-1]>=0)||(s+len<n&&to[s+len]>=0))sc+=3;
+        if(S.timeBias==='early')sc-=s*0.6;else if(S.timeBias==='late')sc-=(n-s)*0.6;
+        if(sc>best){best=sc;bt=ti;bs=s}
+      }
+    }
+    if(bt<0)return capOk?'空き時間が合わない':(dayOk?'療法士の週上限に到達':'療法士の1日上限に到達');
+    const id=place(r.pi,bt,r.d,bs,len,false);
+    if(r.gid)groupSess.set(r.gid,id);
+    return'';
+  };
+  for(const r of reqs){
+    let why=tryPlace(r);
+    if(why&&r.len>1&&S.allowSplit){
+      let left=0;
+      for(let k=0;k<r.len;k++){const w=tryPlace({...r,len:1,gid:undefined});if(w){left++;why=w}}
+      if(!left)why='';
+    }
+    if(why)reasons[ctx.pts[r.pi].id+'|'+r.d]=why;
+  }
+  // 評価
+  let asg=0,prioAsg=0,nonT=0;const per=new Map();
+  for(const s of sessions){asg+=s.len;const pi=ptIdx.get(s.p);prioAsg+=s.len*(4-ctx.pts[pi].prio);per.set(s.p,(per.get(s.p)||0)+s.len);
+    const tt=ctx.pts[pi].tanto[s.disc];if(tt&&tt!==s.t&&thIdx.has(tt))nonT++}
+  let zero=0;ctx.pts.forEach(p=>{if(!per.get(p.id))zero++});
+  const score=asg*100+prioAsg*8-zero*(S.strategy==='equal'?300:30)-nonT*3;
+  return{sessions,reasons,score,dropped};
+}
+function solveBest(ctx,pre,weekLoad,seed){
+  const it=Math.max(1,Math.min(200,+ctx.S.iterations||1));
+  let best=null;
+  for(let i=0;i<it;i++){
+    const res=solveOnce(ctx,pre,weekLoad,mulberry32((seed||1)+i*7919));
+    if(!best||res.score>best.score)best=res;
+  }
+  return best;
+}
+function findPattern(name){return state.patterns.find(p=>p.name===name)}
+function setupFor(date){
+  const g=state.gen,wdi=parseDate(date).getDay();
+  let name=splitList(g.holidays).includes(date)?g.holidayPattern:(g.wdPattern[wdi]||'');
+  const P=name?findPattern(name):null;
+  if(!P)return{S:{...state.settings},absent:null,paused:null,name:'（現在の設定）'};
+  return{S:{...defaultSettings(),...P.settings},absent:P.absentTh?new Set(P.absentTh):null,paused:P.pausedPt?new Set(P.pausedPt):null,name:P.name};
+}
+function buildDay(date,pre,weekLoad,seed){
+  const su=setupFor(date);
+  const ctx=makeCtx(date,su.S,su.absent,su.paused);
+  const res=solveBest(ctx,pre,weekLoad,seed);
+  const req={};ctx.pts.forEach(p=>req[p.id]={...p.units});
+  return{date,pattern:su.name,S:su.S,sessions:res.sessions.map((s,i)=>({...s,id:i+1})),nextId:res.sessions.length+1,req,reasons:res.reasons,excluded:ctx.excluded,dropped:res.dropped,working:ctx.ths.map(t=>t.id)};
+}
+function weekLoadFor(date,excludeDate){
+  const wk=mondayOf(date),load={};
+  if(!state.result)return load;
+  state.result.days.forEach(d=>{if(d.date!==excludeDate&&mondayOf(d.date)===wk&&d.date<date)d.sessions.forEach(s=>load[s.t]=(load[s.t]||0)+s.len)});
+  return load;
+}
+function generateAll(){
+  const g=state.gen;const days=[];const n=Math.max(1,Math.min(31,+g.days||1));
+  const old=state.result?new Map(state.result.days.map(d=>[d.date,d])):new Map();
+  let wk=null,load={},dropped=0;
+  for(let i=0;i<n;i++){
+    const date=addDays(g.start,i);
+    if(mondayOf(date)!==wk){wk=mondayOf(date);load={}}
+    const od=old.get(date);const pre=od?od.sessions.filter(s=>s.locked):[];
+    const day=buildDay(date,pre,load,i+1);dropped+=day.dropped;
+    day.sessions.forEach(s=>load[s.t]=(load[s.t]||0)+s.len);
+    days.push(day);
+  }
+  state.result={days,created:new Date().toLocaleString('ja-JP')};
+  state.ui.day=days[0].date;
+  return dropped;
+}
+function regenDay(date,keepAll){
+  const idx=state.result.days.findIndex(d=>d.date===date);if(idx<0)return;
+  const od=state.result.days[idx];
+  const pre=keepAll?od.sessions:od.sessions.filter(s=>s.locked);
+  const day=buildDay(date,pre,weekLoadFor(date,date),Date.now()%100000);
+  state.result.days[idx]=day;return day.dropped;
+}
+
+/* ================= 集計 ================= */
+let thById=new Map(),ptById=new Map();
+function rebuildMaps(){thById=new Map(state.therapists.map(t=>[t.id,t]));ptById=new Map(state.patients.map(p=>[p.id,p]))}
+function asgMap(day){const m={};day.sessions.forEach(s=>{const k=s.p+'|'+s.disc;m[k]=(m[k]||0)+s.len});return m}
+function dayStats(day){
+  const am=asgMap(day);let req=0,asg=0,short=0,zero=0,pts=0;const per={PT:[0,0],OT:[0,0],ST:[0,0]};
+  for(const pid in day.req){let pr=0,pa=0;pts++;
+    DISC.forEach(d=>{const r=day.req[pid][d]||0,a=Math.min(r,am[pid+'|'+d]||0);req+=r;asg+=a;pr+=r;pa+=a;per[d][0]+=r;per[d][1]+=a;if(r>a)short++});
+    if(pr>0&&pa===0)zero++;
+  }
+  let nonT=0;day.sessions.forEach(s=>{const p=ptById.get(s.p);const t=p&&p['t'+s.disc];if(t&&t!==s.t&&day.working.includes(t))nonT++});
+  return{req,asg,short,zero,pts,per,nonT,excl:Object.keys(day.excluded||{}).length,rate:req?asg/req:1};
+}
+function unassignedList(day){
+  const am=asgMap(day),list=[];
+  for(const pid in day.req)DISC.forEach(d=>{const miss=(day.req[pid][d]||0)-(am[pid+'|'+d]||0);if(miss>0)list.push({p:pid,d,miss,reason:day.reasons[pid+'|'+d]||'手動で外した'})});
+  const pr=id=>+(ptById.get(id)||{}).priority||2;
+  return list.sort((a,b)=>pr(a.p)-pr(b.p)||a.p.localeCompare(b.p));
+}
+function curDay(){if(!state.result)return null;return state.result.days.find(d=>d.date===state.ui.day)||state.result.days[0]}
+
+/* ================= 画面 ================= */
+const TABS=[['gen','作成・結果'],['th','療法士別 予定表'],['pt','患者別 予定'],['un','未割当'],['pm','患者マスタ'],['tm','療法士マスタ'],['set','設定・パターン'],['io','データ入出力']];
+function render(){
+  rebuildMaps();
+  $('#tabs').innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" class="${state.ui.tab===k?'on':''}">${l}</button>`).join('');
+  const f={gen:vGen,th:vTh,pt:vPt,un:vUn,pm:vPm,tm:vTm,set:vSet,io:vIo}[state.ui.tab]||vGen;
+  $('#main').innerHTML=f();
+  if(state.ui.tab==='pm')renderPmBody();
+}
+function patternOptions(sel,withCur){
+  return (withCur?`<option value="">（現在の設定）</option>`:'')+state.patterns.map(p=>`<option ${p.name===sel?'selected':''}>${esc(p.name)}</option>`).join('');
+}
+function daySelect(){
+  if(!state.result)return'';
+  const d=curDay();
+  return `<label class="f">表示日<select data-ui="day">${state.result.days.map(x=>`<option value="${x.date}" ${x.date===d.date?'selected':''}>${mdw(x.date)} ${esc(x.pattern)}</option>`).join('')}</select></label>`;
+}
+function noResult(){return`<div class="card"><p>まだ予定が作成されていません。「作成・結果」タブで<b>予定を自動作成</b>を押してください。</p><button class="b p" data-act="goGen">作成・結果へ</button></div>`}
+
+function vGen(){
+  const g=state.gen;
+  const wdSel=[1,2,3,4,5,6,0].map(i=>`<label class="f">${WD[i]}曜<select data-wdp="${i}">${patternOptions(g.wdPattern[i]||'',true)}</select></label>`).join('');
+  const su=setupFor(g.start);const ctx=makeCtx(g.start,su.S,su.absent,su.paused);
+  const bal=DISC.map(d=>{
+    const dem=ctx.pts.reduce((a,p)=>a+p.units[d],0);
+    const cap=ctx.ths.filter(t=>t.disc===d).reduce((a,t)=>a+Math.min(t.max,t.avail.filter(Boolean).length),0);
+    const pct=cap?Math.min(100,dem/cap*100):100;
+    return`<tr><td><span class="tag ${d}">${d}</span></td><td class="num">${ctx.ths.filter(t=>t.disc===d).length}人</td><td class="num">${dem}</td><td class="num">${cap}</td>
+    <td><div class="bar"><i class="${dem>cap?'over':''}" style="width:${pct}%"></i></div></td><td class="${dem>cap?'ng':'ok'}">${dem>cap?'不足 '+(dem-cap)+'単位':'余裕 '+(cap-dem)+'単位'}</td></tr>`;
+  }).join('');
+  const thChips=DISC.map(d=>`<div style="margin:4px 0"><span class="tag ${d}">${d}</span> `+state.therapists.filter(t=>t.disc===d).map(t=>`<span class="chip tog ${t.absent?'off':d}" data-act="togAbsent" data-id="${esc(t.id)}" title="クリックで出勤/休みを切替">${esc(t.name)}</span>`).join('')+'</div>').join('');
+  let res='';
+  if(state.result){
+    const rows=state.result.days.map(day=>{const s=dayStats(day);return`<tr><td><a href="#" data-act="openDay" data-date="${day.date}">${mdw(day.date)}</a></td><td>${esc(day.pattern)}</td><td class="num">${s.pts}</td><td class="num">${s.excl}</td>
+      ${DISC.map(d=>`<td class="num">${s.per[d][1]}/${s.per[d][0]}</td>`).join('')}<td class="num"><b class="${s.rate<0.95?'warn':'ok'}">${(s.rate*100).toFixed(1)}%</b></td><td class="num ${s.short?'ng':''}">${s.short}</td><td class="num">${s.zero}</td><td class="num">${s.nonT}</td></tr>`}).join('');
+    res=`<div class="card"><h2>作成結果 <span class="muted small">${esc(state.result.created)} 作成</span></h2>
+    <div class="scroll" style="max-height:none"><table class="t"><thead><tr><th>日付</th><th>パターン</th><th class="num">対象患者</th><th class="num">休み等</th><th class="num">PT 割当/要求</th><th class="num">OT</th><th class="num">ST</th><th class="num">充足率</th><th class="num">未割当件数</th><th class="num">0単位の患者</th><th class="num">担当外</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="help">日付をクリックすると療法士別の予定表を開きます。「担当外」は担当療法士が出勤しているのに別の人が入った件数です。</p></div>`;
+  }
+  return`${state.sample?'<div class="notice">現在は<b>サンプルデータ（患者300名・療法士58名）</b>が入っています。「データ入出力」からCSVで実データを取り込めます。</div>':''}
+  <div class="grid2"><div>
+  <div class="card"><h2>1. 期間を選ぶ</h2>
+    <div class="row"><label class="f">開始日<input type="date" data-gen="start" value="${esc(g.start)}"></label>
+    <label class="f">日数<select data-gen="days">${[1,2,3,5,6,7,14,28,31].map(n=>`<option ${+g.days===n?'selected':''}>${n}</option>`).join('')}</select></label></div>
+    <h3>曜日ごとのパターン</h3><div class="row">${wdSel}</div>
+    <h3>祝日・特別日</h3><div class="row"><label class="f" style="flex:1">日付（カンマ区切り）<input data-gen="holidays" value="${esc(g.holidays)}" placeholder="2026-11-23, 2026-12-29"></label>
+    <label class="f">適用パターン<select data-gen="holidayPattern">${patternOptions(g.holidayPattern,true)}</select></label></div>
+    <p class="help">「（現在の設定）」は「設定・パターン」タブで編集中の設定を使います。</p>
+  </div>
+  <div class="card"><h2>2. 作成</h2>
+    <button class="b p big" data-act="generate">予定を自動作成</button>
+    <p class="help">固定（🔒）した予定は残したまま作り直します。300名規模でも数秒で完了します。</p>
+  </div></div>
+  <div>
+  <div class="card"><h2>需給バランス <span class="muted small">${mdw(g.start)}・${esc(su.name)}</span></h2>
+    <table class="t"><thead><tr><th>職種</th><th class="num">出勤</th><th class="num">必要単位</th><th class="num">提供可能</th><th></th><th></th></tr></thead><tbody>${bal}</tbody></table>
+    <p class="help">対象患者 ${ctx.pts.length}名（休止・曜日外・優先度外 ${Object.keys(ctx.excluded).length}名）。不足する場合は「人員不足（均等配分）」パターンや単位上限で調整できます。</p></div>
+  <div class="card"><h2>出勤／休み（急な欠勤はここをクリック）</h2>${thChips}
+    <p class="help">灰色＝休み。曜日の休み・休暇日は療法士マスタで設定します。</p></div>
+  </div></div>${res}`;
+}
+
+function vTh(){
+  const day=curDay();if(!day)return noResult();
+  const F=frame(day.date,day.S);const st=dayStats(day);
+  const disc=state.ui.thDisc;
+  const ths=state.therapists.filter(t=>!disc||t.disc===disc);
+  const bySt=new Map();day.sessions.forEach(s=>{if(!bySt.has(s.t))bySt.set(s.t,[]);bySt.get(s.t).push(s)});
+  const head=`<tr><th class="nm">療法士（単位/上限）</th>${F.times.map((t,i)=>`<th class="${F.isBreak[i]?'brk':''}">${fmt(t)}</th>`).join('')}</tr>`;
+  const body=ths.map(th=>{
+    const works=day.working.includes(th.id);const av=thAvail(th,F);
+    const list=(bySt.get(th.id)||[]).slice().sort((a,b)=>a.s-b.s);
+    const load=list.reduce((a,s)=>a+s.len,0);const max=(+th.max>0?+th.max:+day.S.thMax)||0;
+    const startMap=new Map(list.map(s=>[s.s,s]));
+    let cells='';
+    for(let i=0;i<F.n;i++){
+      const s=startMap.get(i);
+      if(s){const len=Math.min(s.len,F.n-i);cells+=`<td colspan="${len}">${sesHtml(s,day)}</td>`;i+=len-1;continue}
+      const cls=F.isBreak[i]?'brk':(works&&av[i]?'free':'na');
+      cells+=`<td class="${cls}" data-drop="1" data-t="${esc(th.id)}" data-s="${i}"></td>`;
+    }
+    return`<tr class="${works?'':'absent'}"><td class="nm" title="${esc(th.name)}"><span class="tag ${th.disc}">${th.disc}</span> ${esc(th.name)} <span class="muted">${works?load+'/'+max:'休'}</span></td>${cells}</tr>`;
+  }).join('');
+  const un=unassignedList(day);
+  return`<div class="card noprint"><div class="row">${daySelect()}
+    <label class="f">職種<select data-ui="thDisc"><option value="">すべて</option>${DISC.map(d=>`<option ${disc===d?'selected':''}>${d}</option>`).join('')}</select></label>
+    <div class="row" style="margin-left:auto">
+    <button class="b" data-act="fillDay">未割当を空きに自動で入れる</button>
+    <button class="b" data-act="regenDay">この日だけ作り直す</button>
+    <button class="b" data-act="exportGrid">この表をCSV</button>
+    <button class="b" data-act="print">印刷</button></div></div>
+    <p class="help legend">充足率 <b>${(st.rate*100).toFixed(1)}%</b>（${st.asg}/${st.req}単位）　<span>■ドラッグで移動</span><span>■クリックで詳細・固定・削除</span><span style="color:#7c3aed">■紫枠＝固定</span><span class="ng">*＝担当外</span><span>灰色＝勤務外/休憩</span></p>
+    <div><b>未割当 ${un.length}件</b> <span class="muted small">（予定表の空き枠へドラッグして配置／予定をここへドラッグすると外せます）</span>
+    <div class="unbox" data-unbox="1">${un.map((u,i)=>{const p=ptById.get(u.p)||{};return`<span class="chip ${u.d} uitem" draggable="true" data-un="${i}" data-p="${esc(u.p)}" data-d="${u.d}" data-len="${u.miss}" title="${esc(u.reason)}">${esc(p.name||u.p)} ${esc(p.ward||'')} ${u.d}×${u.miss}</span>`}).join('')||'<span class="muted small">なし</span>'}</div></div></div>
+  <div class="card"><h2 class="onlyprint">${mdw(day.date)} 療法士別 予定表（${esc(day.pattern)}）</h2>
+  <div class="scroll"><table class="sg" id="sg"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
+}
+function sesHtml(s,day){
+  const p=ptById.get(s.p)||{name:s.p};const F=frame(day.date,day.S);
+  const t0=F.times[s.s]!=null?F.times[s.s]:F.t0;
+  const tanto=p['t'+s.disc];const alt=tanto&&tanto!==s.t&&day.working.includes(tanto);
+  return`<span class="ses ${s.disc} ${s.locked?'lock':''} ${alt?'alt':''}" draggable="true" data-sid="${s.id}" title="${esc(p.name)} ${esc(p.ward||'')}-${esc(p.room||'')}\n${fmt(t0)}-${fmt(t0+s.len*F.u)} ${s.disc} ${s.len}単位${s.locked?' 固定':''}${alt?'\n担当: '+esc((thById.get(tanto)||{}).name||tanto):''}"><span class="pn">${s.locked?'🔒':''}${esc(p.name)}</span><span class="pr">${esc(p.ward||'')} ${esc(p.room||'')} ${s.len}u</span></span>`;
+}
+
+function vPt(){
+  const day=curDay();if(!day)return noResult();
+  const F=frame(day.date,day.S);const q=state.ui.ptQ.trim(),w=state.ui.ptWard;
+  const wards=[...new Set(state.patients.map(p=>p.ward))].sort();
+  const am=asgMap(day);
+  const byP=new Map();day.sessions.forEach(s=>{if(!byP.has(s.p))byP.set(s.p,[]);byP.get(s.p).push(s)});
+  let list=state.patients.filter(p=>(!w||p.ward===w)&&(!q||(p.name+p.id+p.room).includes(q)));
+  list=list.slice().sort((a,b)=>String(a.ward).localeCompare(String(b.ward))||String(a.room).localeCompare(String(b.room),undefined,{numeric:true})||a.id.localeCompare(b.id));
+  let html='',lastW=null,cnt=0;
+  for(const p of list){
+    const req=day.req[p.id];const ex=day.excluded&&day.excluded[p.id];
+    let short=false;if(req)DISC.forEach(d=>{if((req[d]||0)>(am[p.id+'|'+d]||0))short=true});
+    if(state.ui.ptOnlyShort&&!short)continue;
+    if(p.ward!==lastW){html+=`<tr class="wardh"><td colspan="5">病棟 ${esc(p.ward)}</td></tr>`;lastW=p.ward}
+    const ss=(byP.get(p.id)||[]).slice().sort((a,b)=>a.s-b.s);
+    const chips=ss.map(s=>{const t=F.times[s.s];const th=thById.get(s.t);return`<span class="chip ${s.disc}">${fmt(t)}-${fmt(t+s.len*F.u)} ${s.disc} ${esc(th?th.name:s.t)}</span>`}).join('');
+    const reqTxt=req?DISC.filter(d=>req[d]).map(d=>`${d}${Math.min(req[d],am[p.id+'|'+d]||0)}/${req[d]}`).join(' '):'';
+    html+=`<tr><td>${esc(p.room)}</td><td>${esc(p.name)} <span class="muted small">${esc(p.id)}</span></td><td class="small">${ex?`<span class="muted">${esc(ex)}</span>`:reqTxt}</td><td>${chips||(ex?'':'<span class="muted small">予定なし</span>')}</td><td>${short?'<span class="ng">未充足</span>':(req?'<span class="ok">OK</span>':'')}</td></tr>`;
+    cnt++;
+  }
+  return`<div class="card noprint"><div class="row">${daySelect()}
+    <label class="f">病棟<select data-ui="ptWard"><option value="">すべて</option>${wards.map(x=>`<option ${x===w?'selected':''}>${esc(x)}</option>`).join('')}</select></label>
+    <label class="f">検索（氏名・ID・部屋）<input data-ui="ptQ" value="${esc(q)}"></label>
+    <label class="row small"><input type="checkbox" data-ui="ptOnlyShort" ${state.ui.ptOnlyShort?'checked':''}> 未充足のみ</label>
+    <div style="margin-left:auto" class="row"><button class="b" data-act="exportPtDay">この日の患者別CSV</button><button class="b" data-act="print">印刷（病棟配布用）</button></div></div></div>
+  <div class="card"><h2>${mdw(day.date)} 患者別 予定（${cnt}名）</h2>
+  <div class="scroll"><table class="t"><thead><tr><th>部屋</th><th>氏名</th><th>単位(実施/予定)</th><th>予定</th><th>状態</th></tr></thead><tbody>${html}</tbody></table></div></div>`;
+}
+
+function vUn(){
+  const day=curDay();if(!day)return noResult();
+  const un=unassignedList(day);
+  const reasons={};un.forEach(u=>reasons[u.reason]=(reasons[u.reason]||0)+u.miss);
+  return`<div class="card noprint"><div class="row">${daySelect()}<button class="b" data-act="fillDay">未割当を空きに自動で入れる</button><button class="b" data-act="print">印刷</button></div>
+  <p class="help">理由別：${Object.entries(reasons).map(([k,v])=>`${esc(k)} ${v}単位`).join(' ／ ')||'なし'}</p>
+  <p class="help">対処のヒント：「空き時間が合わない」→ 患者のNG時間・休憩帯・連続上限を見直す／「上限に到達」→ 療法士の上限・人員を見直す、または均等配分パターンを使う。</p></div>
+  <div class="card"><h2>${mdw(day.date)} 未割当 ${un.length}件</h2><div class="scroll"><table class="t"><thead><tr><th>病棟</th><th>部屋</th><th>氏名</th><th>職種</th><th class="num">不足単位</th><th>担当</th><th>NG時間</th><th>理由</th></tr></thead><tbody>
+  ${un.map(u=>{const p=ptById.get(u.p)||{};const t=thById.get(p['t'+u.d]);return`<tr><td>${esc(p.ward)}</td><td>${esc(p.room)}</td><td>${esc(p.name)}</td><td><span class="tag ${u.d}">${u.d}</span></td><td class="num">${u.miss}</td><td>${esc(t?t.name:'')}${t&&!day.working.includes(t.id)?' <span class="muted">(休)</span>':''}</td><td class="small">${esc(p.ng)}</td><td>${esc(u.reason)}</td></tr>`}).join('')}
+  </tbody></table></div></div>`;
+}
+
+/* ---- マスタ ---- */
+const PCOLS=[['id','ID',70],['name','氏名',110],['ward','病棟',50],['room','部屋',55],['pt','PT単位',50,'n'],['ot','OT単位',50,'n'],['st','ST単位',50,'n'],['tPT','担当PT',72,'th'],['tOT','担当OT',72,'th'],['tST','担当ST',72,'th'],['days','実施曜日',120],['ng','NG時間',140],['prefer','希望時間帯',70,['','午前','午後']],['priority','優先度',55,['1','2','3']],['paused','休止',40,'c'],['offDates','休止日',110],['note','備考',100]];
+const TCOLS=[['id','ID',60],['name','氏名',110],['disc','職種',60,DISC],['start','開始',75,'time'],['end','終了',75,'time'],['offDays','休日曜日',70],['offDates','休暇日',150],['ng','NG時間(会議等)',150],['max','1日上限',60,'n'],['absent','休み',40,'c'],['note','備考',120]];
+function cellInput(m,i,c,v){
+  const [k,,w,ty]=c;const a=`data-m="${m}" data-i="${i}" data-k="${k}"`;
+  if(ty==='c')return`<input type="checkbox" ${a} ${v?'checked':''}>`;
+  if(Array.isArray(ty))return`<select ${a}>${ty.map(o=>`<option ${String(v)===o?'selected':''} value="${o}">${o||'—'}</option>`).join('')}</select>`;
+  if(ty==='th')return`<input ${a} value="${esc(v)}" list="dl${k.slice(1)}">`;
+  if(ty==='time')return`<input type="time" ${a} value="${esc(v)}">`;
+  return`<input ${ty==='n'?'type="number" min="0"':''} ${a} value="${esc(v)}">`;
+}
+function vPm(){
+  const wards=[...new Set(state.patients.map(p=>p.ward))].sort();
+  const dl=DISC.map(d=>`<datalist id="dl${d}">${state.therapists.filter(t=>t.disc===d).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</datalist>`).join('');
+  return`${dl}<div class="card noprint"><div class="row">
+    <label class="f">検索<input id="mq" data-ui="mq" value="${esc(state.ui.mq)}" placeholder="氏名・ID"></label>
+    <label class="f">病棟<select data-ui="mWard"><option value="">すべて</option>${wards.map(x=>`<option ${x===state.ui.mWard?'selected':''}>${esc(x)}</option>`).join('')}</select></label>
+    <button class="b" data-act="addPt">＋患者を追加</button><span class="muted small" id="pmCount"></span></div>
+    <h3>一括変更（表示中の患者すべてに適用）</h3>
+    <div class="row"><select id="bk">${[['pt','PT単位'],['ot','OT単位'],['st','ST単位'],['priority','優先度'],['paused','休止(1/0)'],['prefer','希望時間帯'],['days','実施曜日'],['ng','NG時間']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>
+    <select id="bm"><option value="set">にする</option><option value="add">を増減(±)</option></select><input id="bv" style="width:120px" placeholder="値"><button class="b" data-act="bulk">適用</button>
+    <span class="help">例：病棟「3A」で絞り込み → OT単位を「+」 -1 → 病棟行事の日の一時調整など</span></div>
+    <p class="help">実施曜日：例「月火水木金土」（空欄＝毎日）　NG時間：例「10:00-10:40,14:00-14:40」（入浴・透析・検査など）　優先度：1高〜3低　休止日：例「2026-11-25」</p></div>
+  <div class="card"><div class="scroll"><table class="t mt"><thead><tr>${PCOLS.map(c=>`<th style="min-width:${c[2]}px">${c[1]}</th>`).join('')}<th></th></tr></thead><tbody id="pmBody"></tbody></table></div></div>`;
+}
+function pmFiltered(){const q=state.ui.mq.trim(),w=state.ui.mWard;return state.patients.map((p,i)=>[p,i]).filter(([p])=>(!w||p.ward===w)&&(!q||(p.name+p.id+p.room).includes(q)))}
+function renderPmBody(){
+  const rows=pmFiltered();
+  $('#pmBody').innerHTML=rows.map(([p,i])=>`<tr>${PCOLS.map(c=>`<td>${cellInput('p',i,c,p[c[0]])}</td>`).join('')}<td><button class="b s d" data-act="delPt" data-i="${i}">削除</button></td></tr>`).join('');
+  $('#pmCount').textContent=`${rows.length} / ${state.patients.length}名`;
+}
+function vTm(){
+  const d=state.ui.tmDisc;
+  const rows=state.therapists.map((t,i)=>[t,i]).filter(([t])=>!d||t.disc===d);
+  return`<div class="card noprint"><div class="row"><label class="f">職種<select data-ui="tmDisc"><option value="">すべて</option>${DISC.map(x=>`<option ${x===d?'selected':''}>${x}</option>`).join('')}</select></label>
+    <button class="b" data-act="addTh">＋療法士を追加</button><span class="muted small">${rows.length}名</span></div>
+    <p class="help">休日曜日：例「日土」　休暇日：例「2026-11-25,2026-11-26」　NG時間：会議・カンファ・委員会など　1日上限：空欄＝設定の既定値　休み：その日だけの欠勤（作成・結果タブでも切替可）</p></div>
+  <div class="card"><div class="scroll"><table class="t mt"><thead><tr>${TCOLS.map(c=>`<th style="min-width:${c[2]}px">${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>
+  ${rows.map(([t,i])=>`<tr>${TCOLS.map(c=>`<td>${cellInput('t',i,c,t[c[0]])}</td>`).join('')}<td><button class="b s d" data-act="delTh" data-i="${i}">削除</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+/* ---- 設定・パターン ---- */
+const SF=[
+  ['start','訓練開始時刻','time'],['end','訓練終了時刻','time'],['unit','1単位の分数','n'],['breaks','全体の休憩・訓練不可時間帯','text','例: 12:00-13:00, 15:00-15:20'],
+  ['ptMax','患者1日上限単位','n','疾患別リハは通常6、回復期等は9'],['thMax','療法士1日上限単位（既定）','n','個別設定がない療法士に適用'],['thWeekMax','療法士 週上限単位','n','週108単位など'],
+  ['cap','1職種あたり単位上限（0=なし）','n','土日・短縮日に「2」などで一律に抑える'],['minPriority','対象とする患者','sel',[['3','全員（優先度1〜3）'],['2','優先度1〜2のみ'],['1','優先度1のみ']]],
+  ['continuous','同職種の単位を連続でまとめる','chk','PT2単位→40分連続'],['blockMax','1回の最大連続単位','n'],['allowSplit','まとめて入らない時は1単位ずつ分割','chk'],
+  ['maxConsec','患者の連続訓練上限（コマ、0=無制限）','n','PT→OTの連続で疲れないように'],['minGap','別職種の訓練間の最小間隔（コマ）','n','0=連続可'],
+  ['tanto','担当療法士','sel',[['prefer','優先する（入らなければ他者）'],['strict','担当のみ（担当休みの日は他者）'],['ignore','考慮しない']]],
+  ['strategy','人手不足時の方針','sel',[['priority','優先度の高い患者から満たす'],['equal','全員に最低単位を保証して均等配分']]],
+  ['minGuarantee','均等配分時の最低保証単位','n'],
+  ['timeBias','時間の詰め方','sel',[['spread','バランス'],['early','前詰め（午前優先）'],['late','後詰め（午後優先）']]],
+  ['balance','療法士の負荷平準化（0〜3）','n'],['iterations','試行回数（多いほど高精度・低速）','n','10〜30程度'],['randomness','ランダム性（0〜10）','n','0にすると毎回同じ結果']
+];
+function vSet(){
+  const S=state.settings;
+  const f=SF.map(([k,l,ty,x])=>{
+    let inp;
+    if(ty==='chk')inp=`<input type="checkbox" data-set="${k}" ${S[k]?'checked':''}>`;
+    else if(ty==='sel')inp=`<select data-set="${k}">${x.map(([v,t])=>`<option value="${v}" ${String(S[k])===v?'selected':''}>${t}</option>`).join('')}</select>`;
+    else inp=`<input ${ty==='n'?'type="number" step="1"':ty==='time'?'type="time"':''} data-set="${k}" value="${esc(S[k])}">`;
+    return`<label class="f">${l}${inp}${x&&ty!=='sel'?`<span class="help">${esc(x)}</span>`:''}</label>`;
+  }).join('');
+  const pats=state.patterns.map((p,i)=>`<div class="pat ${p.name===state.curPattern?'cur':''}"><span class="nm">${esc(p.name)}</span><span class="muted small" style="flex:2">${esc(p.note||'')}${p.absentTh?` ／休み${p.absentTh.length}名を記憶`:''}${p.pausedPt?` ／休止${p.pausedPt.length}名を記憶`:''}</span>
+    <button class="b s" data-act="applyPat" data-i="${i}">編集用に読込</button><button class="b s" data-act="overPat" data-i="${i}">現在の設定で上書き</button><button class="b s" data-act="renPat" data-i="${i}">名前</button><button class="b s d" data-act="delPat" data-i="${i}">削除</button></div>`).join('');
+  return`<div class="card"><h2>現在の設定 <span class="muted small">（元：${esc(state.curPattern||'—')}）</span></h2><div class="setgrid">${f}</div>
+  <div class="row" style="margin-top:12px"><button class="b" data-act="resetSet">既定値に戻す</button></div></div>
+  <div class="card"><h2>パターン</h2>
+  <p class="help">パターン＝設定一式の保存。「作成・結果」タブで曜日・祝日ごとに割り当てられます。編集手順：「編集用に読込」→ 上の設定を変更 →「現在の設定で上書き」。</p>
+  ${pats}
+  <div class="row" style="margin-top:10px"><input id="pname" placeholder="新しいパターン名"><input id="pnote" placeholder="メモ（任意）" style="flex:1">
+  <label class="row small"><input type="checkbox" id="pabs"> 療法士の休み・患者の休止状態も記憶</label><button class="b p" data-act="newPat">現在の設定を新規保存</button></div>
+  <div class="row" style="margin-top:8px"><button class="b" data-act="restorePat">標準パターンを復元</button></div></div>`;
+}
+function vIo(){
+  return`<div class="grid2"><div>
+  <div class="card"><h2>患者データ（CSV）</h2>
+    <div class="row"><button class="b" data-act="tplPt">ひな形をダウンロード</button><button class="b" data-act="expPt">書き出し</button></div>
+    <div class="row" style="margin-top:8px"><button class="b p" data-act="impPt" data-mode="replace">取り込み（全置換）</button><button class="b" data-act="impPt" data-mode="merge">取り込み（IDで更新・追加）</button></div>
+    <p class="help">Excelで作成したCSV（UTF-8／Shift_JIS どちらも可）。1行目は見出し：${PCOLS.map(c=>c[1]).join('、')}。担当は療法士IDまたは氏名。</p></div>
+  <div class="card"><h2>療法士データ（CSV）</h2>
+    <div class="row"><button class="b" data-act="tplTh">ひな形をダウンロード</button><button class="b" data-act="expTh">書き出し</button></div>
+    <div class="row" style="margin-top:8px"><button class="b p" data-act="impTh" data-mode="replace">取り込み（全置換）</button><button class="b" data-act="impTh" data-mode="merge">取り込み（IDで更新・追加）</button></div>
+    <p class="help">見出し：${TCOLS.map(c=>c[1]).join('、')}。職種はPT/OT/ST。</p></div>
+  </div><div>
+  <div class="card"><h2>作成した予定の書き出し</h2>
+    <div class="row"><button class="b p" data-act="expSched">全期間の予定一覧CSV</button></div>
+    <p class="help">日付・時刻・職種・療法士・患者・病棟の一覧。Excelで並べ替えや集計に使えます。</p></div>
+  <div class="card"><h2>まるごとバックアップ</h2>
+    <div class="row"><button class="b" data-act="backup">全データをJSONで保存</button><button class="b" data-act="restore">JSONから復元</button></div>
+    <p class="help">患者・療法士・設定・パターン・作成した予定をすべて含みます。別のPCへの移行やUSB保管に。</p></div>
+  <div class="card"><h2>初期化</h2>
+    <div class="row"><button class="b d" data-act="loadSample">サンプルデータ（300名）に入れ替え</button><button class="b d" data-act="clearAll">すべて消去</button></div></div>
+  </div></div>`;
+}
+
+/* ================= CSV ================= */
+function parseCSV(text){
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}else f+=c;
+  }
+  if(f||row.length){row.push(f);rows.push(row)}
+  return rows.filter(r=>r.some(v=>v.trim()!==''));
+}
+const toCSV=rows=>rows.map(r=>r.map(v=>{v=v==null?'':String(v);return/[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(',')).join('\r\n');
+function readFile(cb){
+  const inp=$('#file');inp.value='';inp.accept='.csv,.json,.txt';
+  inp.onchange=()=>{const f=inp.files[0];if(!f)return;
+    const rd=new FileReader();rd.onload=()=>{
+      let txt=new TextDecoder('utf-8').decode(rd.result);
+      if(txt.includes('�')){try{txt=new TextDecoder('shift_jis').decode(rd.result)}catch(e){}}
+      cb(txt.replace(/^﻿/,''),f.name);
+    };rd.readAsArrayBuffer(f)};
+  inp.click();
+}
+function rowsToObjs(rows,cols){
+  const head=rows[0].map(h=>h.trim());
+  const idx=cols.map(([k,l])=>{let i=head.indexOf(l);if(i<0)i=head.indexOf(k);return i});
+  return rows.slice(1).map(r=>{const o={};cols.forEach(([k,,,ty],j)=>{const v=idx[j]>=0?(r[idx[j]]||'').trim():'';o[k]=ty==='c'?truthy(v):v});return o}).filter(o=>o.id||o.name);
+}
+function importPt(text,mode){
+  const rows=parseCSV(text);if(rows.length<2){toast('データ行がありません');return}
+  const byName=new Map(state.therapists.map(t=>[t.name.replace(/\s/g,''),t.id]));
+  let list=rowsToObjs(rows,PCOLS).map((o,i)=>{if(!o.id)o.id='P'+String(i+1).padStart(3,'0');
+    ['tPT','tOT','tST'].forEach(k=>{if(o[k]&&!state.therapists.some(t=>t.id===o[k])){const id=byName.get(o[k].replace(/\s/g,''));if(id)o[k]=id}});
+    o.prefer=/午前|AM/i.test(o.prefer)?'午前':/午後|PM/i.test(o.prefer)?'午後':'';o.priority=String(parseInt(z2h(o.priority))||2);return o});
+  mergeList('patients',list,mode);toast(`患者 ${list.length}件を取り込みました`);
+}
+function importTh(text,mode){
+  const rows=parseCSV(text);if(rows.length<2){toast('データ行がありません');return}
+  let list=rowsToObjs(rows,TCOLS).map((o,i)=>{o.disc=String(o.disc).toUpperCase().replace(/[^A-Z]/g,'');if(!DISC.includes(o.disc))o.disc='PT';if(!o.id)o.id=o.disc+String(i+1).padStart(2,'0');
+    ['start','end'].forEach(k=>{const m=toMin(o[k]);o[k]=isNaN(m)?'':fmt(m)});return o});
+  mergeList('therapists',list,mode);toast(`療法士 ${list.length}件を取り込みました`);
+}
+function mergeList(key,list,mode){
+  if(mode==='replace')state[key]=list;
+  else{const m=new Map(state[key].map((x,i)=>[x.id,i]));list.forEach(o=>{if(m.has(o.id))state[key][m.get(o.id)]={...state[key][m.get(o.id)],...o};else state[key].push(o)})}
+  state.sample=false;save();render();
+}
+function objsToCSV(list,cols){return toCSV([cols.map(c=>c[1]),...list.map(o=>cols.map(([k,,,ty])=>ty==='c'?(o[k]?'1':''):o[k]))])}
+
+/* ================= 手動編集 ================= */
+function checkPlace(day,{p,t,disc,s,len},ignoreId){
+  const F=frame(day.date,day.S),errs=[],warns=[];
+  if(s<0||s+len>F.n)errs.push('訓練時間の枠を超えています');
+  for(const o of day.sessions){if(o.id===ignoreId)continue;if(o.s<s+len&&s<o.s+o.len){if(o.t===t)errs.push('療法士の予定が重なります');if(o.p===p)errs.push('患者の予定が重なります')}}
+  const th=thById.get(t),pt=ptById.get(p);
+  if(th&&th.disc!==disc)warns.push(`職種が違います（療法士:${th.disc} / 訓練:${disc}）`);
+  if(th){const av=thAvail(th,F);for(let k=0;k<len;k++)if(!av[s+k]){warns.push('療法士の勤務時間外・休憩・NG時間を含みます');break}
+    if(!day.working.includes(t))warns.push('この療法士は作成時に休みでした')}
+  if(pt){const av=ptAvail(pt,F);for(let k=0;k<len;k++)if(!av[s+k]){warns.push('患者のNG時間・休憩を含みます');break}}
+  return{errs:[...new Set(errs)],warns};
+}
+function dropAt(day,payload,t,s){
+  let len=payload.len;
+  const base={p:payload.p,t,disc:payload.d,s,len};
+  let chk=checkPlace(day,base,payload.sid);
+  if(payload.sid==null){ // 未割当から：入らなければ短くする
+    while(chk.errs.length&&len>1){len--;base.len=len;chk=checkPlace(day,base,null)}
+  }
+  if(chk.errs.length){toast('配置できません：'+chk.errs.join('、'));return}
+  if(chk.warns.length&&!confirm(chk.warns.join('\n')+'\n\nこのまま配置しますか？'))return;
+  if(payload.sid!=null){const ses=day.sessions.find(x=>x.id===payload.sid);Object.assign(ses,{t,s})}
+  else{day.sessions.push({id:day.nextId++,p:payload.p,t,disc:payload.d,s,len,locked:false})}
+  save();render();
+}
+function sesDialog(sid){
+  const day=curDay();const s=day.sessions.find(x=>x.id===sid);if(!s)return;
+  const p=ptById.get(s.p)||{},th=thById.get(s.t)||{},F=frame(day.date,day.S),t0=F.times[s.s];
+  const d=$('#dlg');
+  d.innerHTML=`<h3 style="margin-top:0"><span class="tag ${s.disc}">${s.disc}</span> ${esc(p.name)} <span class="muted small">${esc(p.id)}</span></h3>
+  <p>${mdw(day.date)} ${fmt(t0)}〜${fmt(t0+s.len*F.u)}（${s.len}単位）<br>療法士：${esc(th.name)}（${esc(s.t)}）<br>病棟 ${esc(p.ward)} ／ 部屋 ${esc(p.room)}<br>
+  担当${s.disc}：${esc((thById.get(p['t'+s.disc])||{}).name||'なし')}<br>NG時間：${esc(p.ng||'なし')}${p.note?'<br>備考：'+esc(p.note):''}</p>
+  <div class="row"><label class="f">単位数<input type="number" id="dlen" min="1" value="${s.len}" style="width:70px"></label></div>
+  <div class="row" style="margin-top:12px"><button class="b" data-dact="lock">${s.locked?'固定を解除':'🔒 固定する'}</button><button class="b" data-dact="len">単位数を反映</button><button class="b d" data-dact="del">外す（未割当へ）</button><button class="b" data-dact="close" style="margin-left:auto">閉じる</button></div>`;
+  d.onclick=e=>{const a=e.target.dataset.dact;if(!a)return;
+    if(a==='lock'){s.locked=!s.locked}
+    if(a==='del'){day.sessions=day.sessions.filter(x=>x!==s)}
+    if(a==='len'){const L=Math.max(1,parseInt($('#dlen').value)||1);const c=checkPlace(day,{...s,len:L},s.id);if(c.errs.length){toast(c.errs.join('、'));return}s.len=L}
+    d.close();save();render();
+  };
+  d.showModal();
+}
+
+/* ================= イベント ================= */
+const ACT={
+  goGen(){state.ui.tab='gen';render()},
+  generate(){busy(true);setTimeout(()=>{try{const t=performance.now();const dr=generateAll();save();render();toast(`作成しました（${((performance.now()-t)/1000).toFixed(1)}秒）`+(dr?` 固定予定${dr}件は条件が合わず外れました`:''))}catch(e){console.error(e);alert('エラー: '+e.message)}finally{busy(false)}},30)},
+  openDay(el,e){e.preventDefault();state.ui.day=el.dataset.date;state.ui.tab='th';render()},
+  togAbsent(el){const t=thById.get(el.dataset.id);t.absent=!t.absent;save();render()},
+  regenDay(){if(!confirm('この日の予定を作り直します（固定した予定は残ります）。よろしいですか？'))return;busy(true);setTimeout(()=>{regenDay(curDay().date,false);save();render();busy(false);toast('作り直しました')},30)},
+  fillDay(){busy(true);setTimeout(()=>{const before=unassignedList(curDay()).reduce((a,u)=>a+u.miss,0);regenDay(curDay().date,true);save();render();busy(false);const after=unassignedList(curDay()).reduce((a,u)=>a+u.miss,0);toast(`${before-after}単位を追加配置しました（残り${after}単位）`)},30)},
+  print(){window.print()},
+  exportGrid(){const day=curDay(),F=frame(day.date,day.S);const rows=[['療法士ID','氏名','職種',...F.times.map(fmt)]];
+    state.therapists.forEach(th=>{const r=[th.id,th.name,th.disc,...F.times.map((_,i)=>F.isBreak[i]?'休憩':'')];day.sessions.filter(s=>s.t===th.id).forEach(s=>{const p=ptById.get(s.p)||{};for(let k=0;k<s.len;k++)r[3+s.s+k]=`${p.name||s.p}(${p.ward||''}${p.room?'-'+p.room:''})`});rows.push(r)});
+    download(`療法士別予定_${day.date}.csv`,toCSV(rows))},
+  exportPtDay(){const day=curDay(),F=frame(day.date,day.S);const rows=[['病棟','部屋','患者ID','氏名','開始','終了','職種','単位','療法士']];
+    day.sessions.slice().sort((a,b)=>{const pa=ptById.get(a.p)||{},pb=ptById.get(b.p)||{};return String(pa.ward).localeCompare(String(pb.ward))||String(pa.room).localeCompare(String(pb.room),undefined,{numeric:true})||a.p.localeCompare(b.p)||a.s-b.s})
+    .forEach(s=>{const p=ptById.get(s.p)||{},t=F.times[s.s];rows.push([p.ward,p.room,s.p,p.name,fmt(t),fmt(t+s.len*F.u),s.disc,s.len,(thById.get(s.t)||{}).name||s.t])});
+    download(`患者別予定_${day.date}.csv`,toCSV(rows))},
+  expSched(){if(!state.result){toast('予定がありません');return}const rows=[['日付','曜日','パターン','開始','終了','職種','単位','療法士ID','療法士','患者ID','患者','病棟','部屋','固定']];
+    state.result.days.forEach(day=>{const F=frame(day.date,day.S);day.sessions.slice().sort((a,b)=>a.s-b.s||a.t.localeCompare(b.t)).forEach(s=>{const p=ptById.get(s.p)||{},t=F.times[s.s];rows.push([day.date,F.wd,day.pattern,fmt(t),fmt(t+s.len*F.u),s.disc,s.len,s.t,(thById.get(s.t)||{}).name||'',s.p,p.name||'',p.ward||'',p.room||'',s.locked?'1':''])})});
+    download(`リハ予定一覧_${state.result.days[0].date}.csv`,toCSV(rows))},
+  addPt(){let n=state.patients.length+1;while(state.patients.some(p=>p.id==='P'+String(n).padStart(3,'0')))n++;state.patients.push({id:'P'+String(n).padStart(3,'0'),name:'新規患者',ward:state.ui.mWard||'',room:'',pt:'2',ot:'',st:'',tPT:'',tOT:'',tST:'',days:'',ng:'',prefer:'',priority:'2',paused:false,offDates:'',note:''});save();render()},
+  delPt(el){const p=state.patients[+el.dataset.i];if(confirm(`${p.name} を削除しますか？`)){state.patients.splice(+el.dataset.i,1);save();render()}},
+  addTh(){const d=state.ui.tmDisc||'PT';let n=1;while(state.therapists.some(t=>t.id===d+String(n).padStart(2,'0')))n++;state.therapists.push({id:d+String(n).padStart(2,'0'),name:'新規',disc:d,start:'08:30',end:'17:30',offDays:'日',offDates:'',ng:'',max:'',absent:false,note:''});save();render()},
+  delTh(el){const t=state.therapists[+el.dataset.i];if(confirm(`${t.name} を削除しますか？`)){state.therapists.splice(+el.dataset.i,1);save();render()}},
+  bulk(){const k=$('#bk').value,m=$('#bm').value,v=$('#bv').value.trim();const rows=pmFiltered();
+    if(!confirm(`表示中の${rows.length}名に適用します。よろしいですか？`))return;
+    rows.forEach(([p])=>{if(k==='paused')p.paused=truthy(v);else if(m==='add'&&['pt','ot','st','priority'].includes(k)){let x=(parseInt(p[k])||0)+(parseInt(z2h(v))||0);if(k==='priority')x=Math.min(3,Math.max(1,x));else x=Math.max(0,x);p[k]=String(x)}else p[k]=v});
+    save();renderPmBody();toast('一括変更しました')},
+  applyPat(el){const P=state.patterns[+el.dataset.i];state.settings={...defaultSettings(),...JSON.parse(JSON.stringify(P.settings))};state.curPattern=P.name;
+    if(P.absentTh){const s=new Set(P.absentTh);state.therapists.forEach(t=>t.absent=s.has(t.id))}
+    if(P.pausedPt){const s=new Set(P.pausedPt);state.patients.forEach(p=>p.paused=s.has(p.id))}
+    save();render();toast(`「${P.name}」を読み込みました`)},
+  overPat(el){const P=state.patterns[+el.dataset.i];if(!confirm(`「${P.name}」を現在の設定で上書きしますか？`))return;P.settings=JSON.parse(JSON.stringify(state.settings));
+    if(P.absentTh)P.absentTh=state.therapists.filter(t=>t.absent).map(t=>t.id);if(P.pausedPt)P.pausedPt=state.patients.filter(p=>p.paused).map(p=>p.id);state.curPattern=P.name;save();render();toast('上書きしました')},
+  renPat(el){const P=state.patterns[+el.dataset.i];const n=prompt('パターン名',P.name);if(!n||n===P.name)return;if(findPattern(n)){toast('同じ名前があります');return}
+    const g=state.gen;for(const k in g.wdPattern)if(g.wdPattern[k]===P.name)g.wdPattern[k]=n;if(g.holidayPattern===P.name)g.holidayPattern=n;if(state.curPattern===P.name)state.curPattern=n;
+    const note=prompt('メモ',P.note||'');if(note!=null)P.note=note;P.name=n;save();render()},
+  delPat(el){const P=state.patterns[+el.dataset.i];if(!confirm(`「${P.name}」を削除しますか？`))return;state.patterns.splice(+el.dataset.i,1);
+    const g=state.gen;for(const k in g.wdPattern)if(g.wdPattern[k]===P.name)g.wdPattern[k]='';if(g.holidayPattern===P.name)g.holidayPattern='';save();render()},
+  newPat(){const n=$('#pname').value.trim();if(!n){toast('パターン名を入力してください');return}if(findPattern(n)){toast('同じ名前があります');return}
+    const withAbs=$('#pabs').checked;state.patterns.push({name:n,note:$('#pnote').value.trim(),settings:JSON.parse(JSON.stringify(state.settings)),
+      absentTh:withAbs?state.therapists.filter(t=>t.absent).map(t=>t.id):null,pausedPt:withAbs?state.patients.filter(p=>p.paused).map(p=>p.id):null});state.curPattern=n;save();render();toast('保存しました')},
+  restorePat(){builtinPatterns().forEach(b=>{const i=state.patterns.findIndex(p=>p.name===b.name);if(i>=0)state.patterns[i]=b;else state.patterns.push(b)});save();render();toast('標準パターンを復元しました')},
+  resetSet(){if(confirm('設定を既定値に戻しますか？')){state.settings=defaultSettings();save();render()}},
+  tplPt(){download('患者ひな形.csv',objsToCSV(state.patients.slice(0,3),PCOLS))},
+  tplTh(){download('療法士ひな形.csv',objsToCSV(state.therapists.slice(0,3),TCOLS))},
+  expPt(){download('患者一覧.csv',objsToCSV(state.patients,PCOLS))},
+  expTh(){download('療法士一覧.csv',objsToCSV(state.therapists,TCOLS))},
+  impPt(el){const mode=el.dataset.mode;if(mode==='replace'&&!confirm('現在の患者データをすべて置き換えます。よろしいですか？'))return;readFile(t=>importPt(t,mode))},
+  impTh(el){const mode=el.dataset.mode;if(mode==='replace'&&!confirm('現在の療法士データをすべて置き換えます。よろしいですか？'))return;readFile(t=>importTh(t,mode))},
+  backup(){download(`リハ予定_バックアップ_${ymd(new Date())}.json`,JSON.stringify(state),'json')},
+  restore(){readFile(t=>{try{const s=JSON.parse(t);if(!s.patients||!s.therapists)throw new Error('形式が違います');s.settings={...defaultSettings(),...s.settings};s.ui={...defaultState().ui,...s.ui};state=s;save();render();toast('復元しました')}catch(e){alert('復元できません: '+e.message)}})},
+  loadSample(){if(confirm('サンプルデータに入れ替えます（現在のデータは消えます）')){state=defaultState();save();render()}},
+  clearAll(){if(confirm('すべてのデータを消去します。よろしいですか？')){const s=defaultState();s.patients=[];s.therapists=[];s.sample=false;state=s;save();render()}},
+};
+document.addEventListener('click',e=>{
+  const tab=e.target.closest('[data-tab]');if(tab){state.ui.tab=tab.dataset.tab;save();render();window.scrollTo(0,0);return}
+  const a=e.target.closest('[data-act]');if(a&&ACT[a.dataset.act]){ACT[a.dataset.act](a,e);return}
+  const ses=e.target.closest('[data-sid]');if(ses){sesDialog(+ses.dataset.sid)}
+});
+document.addEventListener('change',e=>{
+  const el=e.target,ds=el.dataset;
+  if(ds.ui){state.ui[ds.ui]=el.type==='checkbox'?el.checked:el.value;save();if(ds.ui==='mq'||ds.ui==='mWard'){renderPmBody();return}render();return}
+  if(ds.gen){state.gen[ds.gen]=ds.gen==='days'?+el.value:el.value;save();render();return}
+  if(ds.wdp!=null){state.gen.wdPattern[ds.wdp]=el.value;save();render();return}
+  if(ds.set){const f=SF.find(x=>x[0]===ds.set);let v=el.type==='checkbox'?el.checked:el.value;if(f&&f[2]==='n')v=+v||0;state.settings[ds.set]=v;save();return}
+  if(ds.m){const list=ds.m==='p'?state.patients:state.therapists;const o=list[+ds.i];const old=o[ds.k];o[ds.k]=el.type==='checkbox'?el.checked:el.value;
+    if(ds.k==='id'&&ds.m==='t'&&old!==o.id){state.patients.forEach(p=>['tPT','tOT','tST'].forEach(k=>{if(p[k]===old)p[k]=o.id}))}
+    state.sample=false;save();rebuildMaps();}
+});
+document.addEventListener('input',e=>{if(e.target.dataset.ui==='mq'){state.ui.mq=e.target.value;clearTimeout(e.target._t);e.target._t=setTimeout(renderPmBody,200)}});
+// ドラッグ＆ドロップ
+let drag=null;
+document.addEventListener('dragstart',e=>{
+  const s=e.target.closest('[data-sid]');const u=e.target.closest('[data-un]');
+  if(s){const day=curDay();const ses=day.sessions.find(x=>x.id===+s.dataset.sid);drag={sid:ses.id,p:ses.p,d:ses.disc,len:ses.len}}
+  else if(u){drag={sid:null,p:u.dataset.p,d:u.dataset.d,len:Math.min(+u.dataset.len,Math.max(1,+curDay().S.blockMax||3))}}
+  else return;
+  e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','x');
+});
+document.addEventListener('dragover',e=>{if(!drag)return;const c=e.target.closest('[data-drop],[data-unbox]');if(!c)return;e.preventDefault();
+  document.querySelectorAll('.over').forEach(x=>x!==c&&x.classList.remove('over'));c.classList.add('over')});
+document.addEventListener('dragleave',e=>{const c=e.target.closest('.over');if(c&&!c.contains(e.relatedTarget))c.classList.remove('over')});
+document.addEventListener('drop',e=>{
+  if(!drag)return;e.preventDefault();document.querySelectorAll('.over').forEach(x=>x.classList.remove('over'));
+  const day=curDay();const c=e.target.closest('[data-drop]'),ub=e.target.closest('[data-unbox]');
+  if(ub&&drag.sid!=null){day.sessions=day.sessions.filter(x=>x.id!==drag.sid);save();render()}
+  else if(c)dropAt(day,drag,c.dataset.t,+c.dataset.s);
+  drag=null;
+});
+document.addEventListener('dragend',()=>{drag=null;document.querySelectorAll('.over').forEach(x=>x.classList.remove('over'))});
+
+/* ================= 起動 ================= */
+state=load()||defaultState();
+if(!state.gen.start)state.gen.start=ymd(new Date());
+render();
+</script>
+</body>
+</html>
