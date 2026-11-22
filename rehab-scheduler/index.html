@@ -54,16 +54,18 @@ table.t td.num,table.t th.num{text-align:right}
 .bar>i.over{background:var(--danger)}
 /* schedule grid */
 .sg{border-collapse:separate;border-spacing:0;font-size:11px;table-layout:fixed}
-.sg th,.sg td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);height:34px;padding:0;text-align:center}
-.sg thead th{background:#f8fafc;position:sticky;top:0;z-index:3;height:24px;font-weight:600;width:46px;min-width:46px}
-.sg .nm{position:sticky;left:0;background:#fff;z-index:2;text-align:left;padding:0 6px;width:150px;min-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
-.sg thead .nm{z-index:4;background:#f8fafc}
+.sg th,.sg td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);height:36px;padding:0;text-align:center;vertical-align:top}
+.sg thead th{background:#f8fafc;position:sticky;top:0;z-index:3;font-weight:600;width:96px;min-width:96px;max-width:96px;padding:4px 2px;vertical-align:middle;font-size:11px}
+.sg thead th.absent{color:#94a3b8}
+.sg .thn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.sg .tm{position:sticky;left:0;background:#f8fafc;z-index:2;width:54px;min-width:54px;font-size:12px;vertical-align:middle;font-weight:600}
+.sg .tm.brk{background:var(--brk)}
+.sg thead .tm{z-index:4}
 .sg td.free{background:#fff}
 .sg td.na{background:var(--na)}
 .sg td.brk{background:var(--brk)}
-.sg tr.absent .nm{color:#94a3b8}
 .sg td.over{outline:2px dashed var(--accent);outline-offset:-2px;background:#eff6ff}
-.ses{display:block;margin:2px;border-radius:5px;padding:1px 3px;height:28px;overflow:hidden;cursor:grab;line-height:13px;text-align:left;border-left:4px solid}
+.ses{display:block;margin:2px;border-radius:5px;padding:2px 4px;overflow:hidden;cursor:grab;line-height:13px;text-align:left;border-left:4px solid}
 .ses.PT{background:var(--pt);border-color:var(--ptb)}.ses.OT{background:var(--ot);border-color:var(--otb)}.ses.ST{background:var(--st);border-color:var(--stb)}
 .ses .pn{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .ses .pr{color:#475569;white-space:nowrap;overflow:hidden;display:block}
@@ -97,7 +99,7 @@ dialog::backdrop{background:rgba(15,23,42,.35)}
   main{padding:0}
   .card{border:0;padding:0;margin:0 0 8px}
   .scroll{max-height:none;overflow:visible;border:0}
-  .sg .nm,.sg thead th,table.t th{position:static}
+  .sg .tm,.sg thead th,table.t th{position:static}
   .ses{border:1px solid #999;border-left-width:4px}
   @page{size:A4 landscape;margin:8mm}
   tr{page-break-inside:avoid}
@@ -202,7 +204,7 @@ function defaultState(){
     settings:defaultSettings(),therapists:s.therapists,patients:s.patients,
     patterns:builtinPatterns(),curPattern:'平日標準',
     gen:{start:today,days:1,wdPattern:{0:'日祝（最小体制）',6:'土曜（短縮）'},holidays:'',holidayPattern:'日祝（最小体制）'},
-    result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,mq:'',mWard:'',tmDisc:''},sample:true
+    result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,thShowAbsent:false,mq:'',mWard:'',tmDisc:''},sample:true
   };
 }
 let state;
@@ -506,24 +508,29 @@ function vTh(){
   const disc=state.ui.thDisc;
   const ths=state.therapists.filter(t=>!disc||t.disc===disc);
   const bySt=new Map();day.sessions.forEach(s=>{if(!bySt.has(s.t))bySt.set(s.t,[]);bySt.get(s.t).push(s)});
-  const head=`<tr><th class="nm">療法士（単位/上限）</th>${F.times.map((t,i)=>`<th class="${F.isBreak[i]?'brk':''}">${fmt(t)}</th>`).join('')}</tr>`;
-  const body=ths.map(th=>{
-    const works=day.working.includes(th.id);const av=thAvail(th,F);
+  const cols=ths.filter(th=>state.ui.thShowAbsent||day.working.includes(th.id)).map(th=>{
+    const works=day.working.includes(th.id);
     const list=(bySt.get(th.id)||[]).slice().sort((a,b)=>a.s-b.s);
     const load=list.reduce((a,s)=>a+s.len,0);const max=(+th.max>0?+th.max:+day.S.thMax)||0;
-    const startMap=new Map(list.map(s=>[s.s,s]));
+    return{th,works,av:thAvail(th,F),startMap:new Map(list.map(s=>[s.s,s])),load,max,until:0};
+  });
+  const head=`<tr><th class="tm">時刻</th>${cols.map(c=>`<th class="${c.works?'':'absent'}" title="${esc(c.th.name)}"><span class="tag ${c.th.disc}">${c.th.disc}</span><div class="thn">${esc(c.th.name)}</div><div class="muted">${c.works?c.load+'/'+c.max:'休'}</div></th>`).join('')}</tr>`;
+  let body='';
+  for(let i=0;i<F.n;i++){
     let cells='';
-    for(let i=0;i<F.n;i++){
-      const s=startMap.get(i);
-      if(s){const len=Math.min(s.len,F.n-i);cells+=`<td colspan="${len}">${sesHtml(s,day)}</td>`;i+=len-1;continue}
-      const cls=F.isBreak[i]?'brk':(works&&av[i]?'free':'na');
-      cells+=`<td class="${cls}" data-drop="1" data-t="${esc(th.id)}" data-s="${i}"></td>`;
+    for(const c of cols){
+      if(c.until>i)continue;
+      const s=c.startMap.get(i);
+      if(s){const len=Math.min(s.len,F.n-i);c.until=i+len;cells+=`<td rowspan="${len}">${sesHtml(s,day,len)}</td>`;continue}
+      const cls=F.isBreak[i]?'brk':(c.works&&c.av[i]?'free':'na');
+      cells+=`<td class="${cls}" data-drop="1" data-t="${esc(c.th.id)}" data-s="${i}"></td>`;
     }
-    return`<tr class="${works?'':'absent'}"><td class="nm" title="${esc(th.name)}"><span class="tag ${th.disc}">${th.disc}</span> ${esc(th.name)} <span class="muted">${works?load+'/'+max:'休'}</span></td>${cells}</tr>`;
-  }).join('');
+    body+=`<tr><th class="tm ${F.isBreak[i]?'brk':''}">${fmt(F.times[i])}</th>${cells}</tr>`;
+  }
   const un=unassignedList(day);
   return`<div class="card noprint"><div class="row">${daySelect()}
     <label class="f">職種<select data-ui="thDisc"><option value="">すべて</option>${DISC.map(d=>`<option ${disc===d?'selected':''}>${d}</option>`).join('')}</select></label>
+    <label class="row small"><input type="checkbox" data-ui="thShowAbsent" ${state.ui.thShowAbsent?'checked':''}> 休みの人も表示</label>
     <div class="row" style="margin-left:auto">
     <button class="b" data-act="fillDay">未割当を空きに自動で入れる</button>
     <button class="b" data-act="regenDay">この日だけ作り直す</button>
@@ -535,11 +542,11 @@ function vTh(){
   <div class="card"><h2 class="onlyprint">${mdw(day.date)} 療法士別 予定表（${esc(day.pattern)}）</h2>
   <div class="scroll"><table class="sg" id="sg"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
 }
-function sesHtml(s,day){
+function sesHtml(s,day,rows){
   const p=ptById.get(s.p)||{name:s.p};const F=frame(day.date,day.S);
   const t0=F.times[s.s]!=null?F.times[s.s]:F.t0;
   const tanto=p['t'+s.disc];const alt=tanto&&tanto!==s.t&&day.working.includes(tanto);
-  return`<span class="ses ${s.disc} ${s.locked?'lock':''} ${alt?'alt':''}" draggable="true" data-sid="${s.id}" title="${esc(p.name)} ${esc(p.ward||'')}-${esc(p.room||'')}\n${fmt(t0)}-${fmt(t0+s.len*F.u)} ${s.disc} ${s.len}単位${s.locked?' 固定':''}${alt?'\n担当: '+esc((thById.get(tanto)||{}).name||tanto):''}"><span class="pn">${s.locked?'🔒':''}${esc(p.name)}</span><span class="pr">${esc(p.ward||'')} ${esc(p.room||'')} ${s.len}u</span></span>`;
+  return`<span class="ses ${s.disc} ${s.locked?'lock':''} ${alt?'alt':''}" style="height:${(rows||1)*36-5}px" draggable="true" data-sid="${s.id}" title="${esc(p.name)} ${esc(p.ward||'')}-${esc(p.room||'')}\n${fmt(t0)}-${fmt(t0+s.len*F.u)} ${s.disc} ${s.len}単位${s.locked?' 固定':''}${alt?'\n担当: '+esc((thById.get(tanto)||{}).name||tanto):''}"><span class="pn">${s.locked?'🔒':''}${esc(p.name)}</span><span class="pr">${esc(p.ward||'')} ${esc(p.room||'')}</span>${(rows||1)>1?`<span class="pr">${fmt(t0)}〜 ${s.len}単位</span>`:''}</span>`;
 }
 
 function vPt(){
@@ -778,9 +785,10 @@ const ACT={
   regenDay(){if(!confirm('この日の予定を作り直します（固定した予定は残ります）。よろしいですか？'))return;busy(true);setTimeout(()=>{regenDay(curDay().date,false);save();render();busy(false);toast('作り直しました')},30)},
   fillDay(){busy(true);setTimeout(()=>{const before=unassignedList(curDay()).reduce((a,u)=>a+u.miss,0);regenDay(curDay().date,true);save();render();busy(false);const after=unassignedList(curDay()).reduce((a,u)=>a+u.miss,0);toast(`${before-after}単位を追加配置しました（残り${after}単位）`)},30)},
   print(){window.print()},
-  exportGrid(){const day=curDay(),F=frame(day.date,day.S);const rows=[['療法士ID','氏名','職種',...F.times.map(fmt)]];
-    state.therapists.forEach(th=>{const r=[th.id,th.name,th.disc,...F.times.map((_,i)=>F.isBreak[i]?'休憩':'')];day.sessions.filter(s=>s.t===th.id).forEach(s=>{const p=ptById.get(s.p)||{};for(let k=0;k<s.len;k++)r[3+s.s+k]=`${p.name||s.p}(${p.ward||''}${p.room?'-'+p.room:''})`});rows.push(r)});
-    download(`療法士別予定_${day.date}.csv`,toCSV(rows))},
+  exportGrid(){const day=curDay(),F=frame(day.date,day.S);const ths=state.therapists.filter(t=>day.working.includes(t.id));
+    const grid=F.times.map((t,i)=>[fmt(t),...ths.map(()=>F.isBreak[i]?'休憩':'')]);
+    ths.forEach((th,j)=>day.sessions.filter(s=>s.t===th.id).forEach(s=>{const p=ptById.get(s.p)||{};for(let k=0;k<s.len&&s.s+k<F.n;k++)grid[s.s+k][1+j]=`${p.name||s.p}(${p.ward||''}${p.room?'-'+p.room:''})`}));
+    download(`療法士別予定_${day.date}.csv`,toCSV([['時刻',...ths.map(t=>`${t.disc} ${t.name}`)],...grid]))},
   exportPtDay(){const day=curDay(),F=frame(day.date,day.S);const rows=[['病棟','部屋','患者ID','氏名','開始','終了','職種','単位','療法士']];
     day.sessions.slice().sort((a,b)=>{const pa=ptById.get(a.p)||{},pb=ptById.get(b.p)||{};return String(pa.ward).localeCompare(String(pb.ward))||String(pa.room).localeCompare(String(pb.room),undefined,{numeric:true})||a.p.localeCompare(b.p)||a.s-b.s})
     .forEach(s=>{const p=ptById.get(s.p)||{},t=F.times[s.s];rows.push([p.ward,p.room,s.p,p.name,fmt(t),fmt(t+s.len*F.u),s.disc,s.len,(thById.get(s.t)||{}).name||s.t])});
