@@ -72,6 +72,11 @@ table.t td.num,table.t th.num{text-align:right}
 .ses .pn{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .ses .pr{color:#475569;white-space:nowrap;overflow:hidden;display:block}
 .ses.lock{box-shadow:inset 0 0 0 2px #7c3aed}
+.ses.fx .pn::before{content:"📌"}
+.irr td{padding:2px 3px}.irr input,.irr select{width:100%;font-size:12px;padding:3px 4px}
+.tpl{display:flex;flex-wrap:wrap;gap:6px}
+.iss{max-height:340px;overflow:auto}
+.iss li{margin:2px 0}
 .ses.alt .pn::after{content:" *";color:var(--danger)}
 .unbox{max-height:160px;overflow:auto;border:1px dashed #94a3b8;border-radius:6px;padding:6px;background:#fafafa}
 .unbox.over{background:#fee2e2}
@@ -138,7 +143,9 @@ function parseRanges(str){
 }
 const splitList=s=>z2h(s).split(/[,、;；\s]+/).map(x=>x.trim()).filter(Boolean).map(normDate);
 function normDate(s){const m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/.exec(s);return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:s}
-function parseDate(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
+function parseDate(s){const [y,m,d]=String(s).split('-').map(Number);return new Date(y,m-1,d)}
+function validDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(String(s))&&!isNaN(parseDate(s).getTime())&&ymd(parseDate(s))===s}
+const rangesStr=rs=>rs.map(r=>fmt(r[0])+'-'+fmt(r[1])).join(',');
 function ymd(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function addDays(s,n){const d=parseDate(s);d.setDate(d.getDate()+n);return ymd(d)}
 function mondayOf(s){const d=parseDate(s);const w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);return ymd(d)}
@@ -206,23 +213,23 @@ function defaultState(){
     settings:defaultSettings(),therapists:s.therapists,patients:s.patients,
     patterns:builtinPatterns(),curPattern:'平日標準',
     gen:{start:today,days:1,wdPattern:{0:'日祝（最小体制）',6:'土曜（短縮）'},holidays:'',holidayPattern:'日祝（最小体制）'},
-    result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,ptView:'grid',thShowAbsent:false,mq:'',mWard:'',tmDisc:''},sample:true
+    rules:[],result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,ptView:'grid',irrDate:'',thShowAbsent:false,mq:'',mWard:'',tmDisc:''},sample:true
   };
 }
 let state;
 function load(){
-  try{const s=JSON.parse(localStorage.getItem(LS_KEY));if(s&&s.patients){s.settings={...defaultSettings(),...s.settings};s.ui={...defaultState().ui,...s.ui};return s}}catch(e){}
+  try{const s=JSON.parse(localStorage.getItem(LS_KEY));if(s&&s.patients){if(!Array.isArray(s.rules))s.rules=[];if(!Array.isArray(s.therapists))s.therapists=[];s.settings={...defaultSettings(),...s.settings};s.ui={...defaultState().ui,...s.ui};return s}}catch(e){}
   return null;
 }
 let saveTimer=null;
-function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){toast('自動保存に失敗しました（容量不足の可能性）。JSONで書き出してください')}},300)}
+function save(){effCache.clear();clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){toast('自動保存に失敗しました（容量不足の可能性）。JSONで書き出してください')}},300)}
 
 /* ================= スケジューラ本体 ================= */
 function frame(date,S){
-  const u=Math.max(5,+S.unit||20),t0=toMin(S.start),t1=toMin(S.end);
-  let st=+S.step||u;if(st<1||u%st)st=u; // 表の刻み（1単位を割り切れる値）
+  let u=Math.round(+z2h(S.unit));if(!(u>=5&&u<=240))u=20;const t0=toMin(S.start),t1=toMin(S.end);
+  let st=Math.round(+S.step)||u;if(!(st>=1)||u%st)st=u; // 表の刻み（1単位を割り切れる値）
   const k=u/st;
-  const n=(isNaN(t0)||isNaN(t1))?0:Math.max(0,Math.floor((t1-t0)/st));
+  const n=(isNaN(t0)||isNaN(t1))?0:Math.min(Math.ceil(1440/st),Math.max(0,Math.floor((t1-t0)/st)));
   const times=Array.from({length:n},(_,i)=>t0+i*st);
   const br=parseRanges(S.breaks);
   const isBreak=times.map(t=>overlap(t,t+st,br));
@@ -231,37 +238,85 @@ function frame(date,S){
   return{date,S,u,st,k,gs,t0,t1,n,times,isBreak,wdi,wd:WD[wdi]};
 }
 function thWorks(th,F,absentSet){
+  if(th._absent)return false;
   if(absentSet?absentSet.has(th.id):!!th.absent)return false;
-  if((th.offDays||'').includes(F.wd))return false;
+  if(F.wd&&String(th.offDays||'').includes(F.wd))return false;
   if(splitList(th.offDates).includes(F.date))return false;
   return true;
 }
 function thAvail(th,F){const s=toMinOr(th.start,F.t0),e=toMinOr(th.end,F.t1),ng=parseRanges(th.ng);return F.times.map((t,i)=>!F.isBreak[i]&&t>=s&&t+F.st<=e&&!overlap(t,t+F.st,ng))}
 function ptInactive(p,F,pausedSet){
+  if(p._pause)return p._pause;
   if(pausedSet?pausedSet.has(p.id):!!p.paused)return'休止';
-  const days=(p.days||'').trim();if(days&&!days.includes(F.wd))return'実施曜日外';
+  const days=String(p.days||'').trim();if(days&&!days.includes(F.wd))return'実施曜日外';
   if(splitList(p.offDates).includes(F.date))return'休止日';
-  if((+p.priority||2)>(+F.S.minPriority||3))return'優先度対象外';
+  if((parseInt(z2h(p.priority))||2)>(+F.S.minPriority||3))return'優先度対象外';
   return'';
 }
 function ptAvail(p,F){const ng=parseRanges(p.ng);return F.times.map((t,i)=>!F.isBreak[i]&&!overlap(t,t+F.st,ng))}
 function ptUnits(p,S){
   const u={};DISC.forEach(d=>{let v=Math.max(0,parseInt(z2h(p[d.toLowerCase()]))||0);if(+S.cap>0)v=Math.min(v,+S.cap);u[d]=v});
-  const mx=+S.ptMax||0;
-  if(mx>0){let sum;while((sum=DISC.reduce((a,d)=>a+u[d],0))>mx){const d=DISC.reduce((a,b)=>u[b]>u[a]?b:a);u[d]--}}
+  let mx=+S.ptMax||0;if(p._cap!=null)mx=mx>0?Math.min(mx,p._cap):p._cap;
+  if(mx>0||p._cap!=null){let sum;while((sum=DISC.reduce((a,d)=>a+u[d],0))>mx){const d=DISC.reduce((a,b)=>u[b]>u[a]?b:a);u[d]--}}
   return u;
 }
+/* ---- 臨時ルール（イレギュラー）を反映した「その日の実データ」 ---- */
+let effCache=new Map();
+function ruleActive(r,date){
+  if(!r||r.on===false)return false;
+  const f=normDate(z2h(r.from||'').trim()),t=normDate(z2h(r.to||'').trim())||f;
+  if(f&&date<f)return false;if(t&&date>t)return false;
+  if(r.wd&&String(r.wd).trim()){const wd=validDate(date)?WD[parseDate(date).getDay()]:'';if(!String(r.wd).includes(wd))return false}
+  return true;
+}
+function rulesFor(date){return(state.rules||[]).filter(r=>ruleActive(r,date))}
+function effData(date,S){
+  const key=date+'|'+JSON.stringify(S);if(effCache.has(key))return effCache.get(key);
+  const S2={...S};
+  const thL=[],thM=new Map(),ptL=[],ptM=new Map();
+  for(const t of state.therapists){if(!t||t.id==null)continue;const id=String(t.id).trim();if(!id||thM.has(id))continue;const c={...t,id,disc:String(t.disc||'').trim().toUpperCase()};thL.push(c);thM.set(id,c)}
+  for(const p of state.patients){if(!p||p.id==null)continue;const id=String(p.id).trim();if(!id||ptM.has(id))continue;const c={...p,id};ptL.push(c);ptM.set(id,c)}
+  const fixed=[],addNg=(o,rs)=>{o.ng=(o.ng?o.ng+',':'')+rangesStr(rs)};
+  for(const r of rulesFor(date)){
+    const tg=r.target,k=String(r.key||'').trim(),d=DISC.includes(r.disc)?r.disc:'';
+    const pT=tg==='pt'?[ptM.get(k)].filter(Boolean):tg==='ward'?ptL.filter(p=>String(p.ward).trim()===k):tg==='all'?ptL:tg==='disc'?ptL:[];
+    const tT=tg==='th'?[thM.get(k)].filter(Boolean):tg==='disc'?thL.filter(t=>t.disc===k.toUpperCase()):tg==='all'?thL:[];
+    const rs=parseRanges(r.time),isTh=tg==='th'||tg==='disc';
+    const num=parseInt(z2h(r.value));
+    switch(r.action){
+      case'off':if(isTh)tT.forEach(t=>t._absent=true);else pT.forEach(p=>p._pause='臨時休止');break;
+      case'ng':if(!rs.length)break;if(tg==='all')S2.breaks=(S2.breaks?S2.breaks+',':'')+rangesStr(rs);else if(isTh)tT.forEach(t=>addNg(t,rs));else pT.forEach(p=>addNg(p,rs));break;
+      case'hours':{if(!rs.length)break;const[a,b]=rs[0];
+        if(tg==='all'){S2.start=fmt(a);S2.end=fmt(b)}else if(isTh)tT.forEach(t=>{t.start=fmt(a);t.end=fmt(b)});else pT.forEach(p=>addNg(p,[[0,a],[b,24*60]].filter(x=>x[1]>x[0])));break}
+      case'units':{const v=z2h(r.value).trim();if(isNaN(num))break;const rel=/^[+\-]/.test(v);
+        const ds=d?[d]:(tg==='disc'&&DISC.includes(k.toUpperCase())?[k.toUpperCase()]:DISC);
+        pT.forEach(p=>ds.forEach(dd=>{const kk=dd.toLowerCase(),cur=Math.max(0,parseInt(z2h(p[kk]))||0);p[kk]=String(Math.max(0,Math.min(30,rel?cur+num:num)))}));break}
+      case'cap':if(isNaN(num)||num<0)break;if(tg==='all')S2.ptMax=num;if(isTh||tg==='all')tT.forEach(t=>t.max=String(num||''));if(tg==='pt'||tg==='ward')pT.forEach(p=>p._cap=num);break;
+      case'tanto':if(!d)break;pT.forEach(p=>p['t'+d]=String(r.th||'').trim());break;
+      case'prefer':pT.forEach(p=>p.prefer=/午前|AM/i.test(r.value)?'午前':/午後|PM/i.test(r.value)?'午後':'');break;
+      case'priority':if(num>=1&&num<=3)pT.forEach(p=>p.priority=String(num));break;
+      case'fix':{if(tg!=='pt'||!d||!pT.length)break;const st=rs.length?rs[0][0]:toMin(r.time);if(isNaN(st))break;
+        fixed.push({p:k,disc:d,start:st,end:rs.length?rs[0][1]:null,len:num>0?Math.min(num,12):null,t:String(r.th||'').trim()});break}
+    }
+  }
+  let u=Math.round(+z2h(S2.unit));if(!(u>=5&&u<=240))u=20;
+  fixed.forEach(f=>{if(f.len==null)f.len=f.end!=null?Math.max(1,Math.round((f.end-f.start)/u)):1});
+  fixed.forEach(f=>{const p=ptM.get(f.p),kk=f.disc.toLowerCase(),cur=Math.max(0,parseInt(z2h(p[kk]))||0);
+    const need=fixed.filter(x=>x.p===f.p&&x.disc===f.disc).reduce((a,x)=>a+x.len,0);if(cur<need)p[kk]=String(need)});
+  const E={S:S2,thL,thM,ptL,ptM,fixed};effCache.set(key,E);return E;
+}
+function effFor(day){return effData(day.date,day.S)}
 function makeCtx(date,S,absentSet,pausedSet){
-  const F=frame(date,S);
-  const ths=state.therapists.filter(th=>DISC.includes(th.disc)&&thWorks(th,F,absentSet)).map(th=>({id:th.id,disc:th.disc,avail:thAvail(th,F),max:(+th.max>0?+th.max:+S.thMax)||999}));
+  const E=effData(date,S);S=E.S;const F=frame(date,S);
+  const ths=E.thL.filter(th=>DISC.includes(th.disc)&&thWorks(th,F,absentSet)).map(th=>({id:th.id,disc:th.disc,avail:thAvail(th,F),max:(+th.max>0?+th.max:+S.thMax)||999}));
   const pts=[],excluded={};
-  state.patients.forEach(p=>{
+  E.ptL.forEach(p=>{
     const why=ptInactive(p,F,pausedSet);if(why){excluded[p.id]=why;return}
     const units=ptUnits(p,S);if(!DISC.some(d=>units[d]>0))return;
     const avail=ptAvail(p,F);
-    pts.push({id:p.id,prio:+p.priority||2,prefer:p.prefer||'',tanto:{PT:p.tPT||'',OT:p.tOT||'',ST:p.tST||''},avail,units,free:avail.filter(Boolean).length});
+    pts.push({id:p.id,prio:Math.min(3,Math.max(1,parseInt(z2h(p.priority))||2)),prefer:p.prefer||'',tanto:{PT:p.tPT||'',OT:p.tOT||'',ST:p.tST||''},avail,units,free:avail.filter(Boolean).length});
   });
-  return{F,S,n:F.n,ths,pts,excluded};
+  return{F,S,n:F.n,ths,pts,excluded,fixed:E.fixed};
 }
 function solveOnce(ctx,pre,weekLoad,rng){
   const {n,S,F}=ctx;
@@ -286,6 +341,24 @@ function solveOnce(ctx,pre,weekLoad,rng){
     if(!ok){dropped++;continue}
     place(pi,ti,L.disc,L.s,L.len,L.locked);remaining[pi][L.disc]=Math.max(0,(remaining[pi][L.disc]||0)-L.len);
   }
+  // 時刻指定（臨時ルール）
+  const fixFail=[];
+  for(const fx of(ctx.fixed||[])){
+    const pi=ptIdx.get(fx.p);if(pi==null)continue;
+    const key=fx.p+'|'+fx.disc,len=Math.min(fx.len,remaining[pi][fx.disc]||0);
+    if(len<=0){fixFail.push({...fx,why:'上限設定により単位なし'});continue}
+    const s0=(fx.start-F.t0)/F.st;
+    if(!Number.isInteger(s0)||s0<0||s0+len*K>n){fixFail.push({...fx,why:'訓練時間の枠外・刻みに合わない'});continue}
+    const p=ctx.pts[pi],tanto=p.tanto[fx.disc];
+    const cands=[];for(let i=0;i<ctx.ths.length;i++)if(ctx.ths[i].disc===fx.disc&&(!fx.t||ctx.ths[i].id===fx.t))cands.push(i);
+    cands.sort((a,b)=>(ctx.ths[b].id===tanto)-(ctx.ths[a].id===tanto)||dayLoad[a]-dayLoad[b]);
+    let done=false;
+    for(const ti of cands){const T=ctx.ths[ti];
+      if(dayLoad[ti]+len>T.max||(weekLoad[T.id]||0)+dayLoad[ti]+len>(+S.thWeekMax||9999))continue;
+      let ok=true;for(let q=0;q<len*K;q++){const x=s0+q;if(!T.avail[x]||thOcc[ti][x]>=0||!p.avail[x]||ptOcc[pi][x]>=0){ok=false;break}}
+      if(ok){place(pi,ti,fx.disc,s0,len,false);sessions[sessions.length-1].fixed=true;remaining[pi][fx.disc]-=len;done=true;break}}
+    if(!done){const why=fx.t&&!cands.length?'指定の療法士が休み':'その時間は療法士または患者が空いていない';fixFail.push({...fx,why});reasons[key]='時刻指定が入らない：'+why}
+  }
   // 要求を作る
   const reqs=[];let g=0;
   ctx.pts.forEach((p,pi)=>DISC.forEach(d=>{
@@ -305,7 +378,7 @@ function solveOnce(ctx,pre,weekLoad,rng){
   const halfDay=12*60;
   const tryPlace=r=>{
     const p=ctx.pts[r.pi],pa=p.avail,po=ptOcc[r.pi],len=r.len,W=len*K,gapF=minGap*K,consF=maxConsec*K;
-    const tantoTi=p.tanto[r.d]?thIdx.get(p.tanto[r.d]):undefined;
+    let tantoTi=p.tanto[r.d]?thIdx.get(p.tanto[r.d]):undefined;if(tantoTi!==undefined&&ctx.ths[tantoTi].disc!==r.d)tantoTi=undefined;
     let cands=[];for(let i=0;i<ctx.ths.length;i++)if(ctx.ths[i].disc===r.d)cands.push(i);
     if(!cands.length)return'出勤している'+r.d+'がいない';
     if(S.tanto==='strict'&&tantoTi!==undefined)cands=[tantoTi];
@@ -368,7 +441,7 @@ function solveOnce(ctx,pre,weekLoad,rng){
     const tt=ctx.pts[pi].tanto[s.disc];if(tt&&tt!==s.t&&thIdx.has(tt))nonT++}
   let zero=0;ctx.pts.forEach(p=>{if(!per.get(p.id))zero++});
   const score=asg*100+prioAsg*8-zero*(S.strategy==='equal'?300:30)-nonT*3;
-  return{sessions,reasons,score,dropped};
+  return{sessions,reasons,score,dropped,fixFail};
 }
 function solveBest(ctx,pre,weekLoad,seed){
   const it=Math.max(1,Math.min(200,+ctx.S.iterations||1));
@@ -392,7 +465,7 @@ function buildDay(date,pre,weekLoad,seed){
   const ctx=makeCtx(date,su.S,su.absent,su.paused);
   const res=solveBest(ctx,pre,weekLoad,seed);
   const req={};ctx.pts.forEach(p=>req[p.id]={...p.units});
-  return{date,pattern:su.name,S:su.S,sessions:res.sessions.map((s,i)=>({...s,id:i+1})),nextId:res.sessions.length+1,req,reasons:res.reasons,excluded:ctx.excluded,dropped:res.dropped,working:ctx.ths.map(t=>t.id)};
+  return{date,pattern:su.name,S:ctx.S,fixFail:res.fixFail,sessions:res.sessions.map((s,i)=>({...s,id:i+1})),nextId:res.sessions.length+1,req,reasons:res.reasons,excluded:ctx.excluded,dropped:res.dropped,working:ctx.ths.map(t=>t.id)};
 }
 function weekLoadFor(date,excludeDate){
   const wk=mondayOf(date),load={};
@@ -402,6 +475,7 @@ function weekLoadFor(date,excludeDate){
 }
 function generateAll(){
   const g=state.gen;const days=[];const n=Math.max(1,Math.min(31,+g.days||1));
+  if(!validDate(g.start))throw new Error('開始日が正しくありません');
   const old=state.result?new Map(state.result.days.map(d=>[d.date,d])):new Map();
   let wk=null,load={},dropped=0;
   for(let i=0;i<n;i++){
@@ -446,11 +520,12 @@ function unassignedList(day){
 function curDay(){if(!state.result)return null;return state.result.days.find(d=>d.date===state.ui.day)||state.result.days[0]}
 
 /* ================= 画面 ================= */
-const TABS=[['gen','作成・結果'],['th','療法士別 予定表'],['pt','患者別 予定'],['un','未割当'],['pm','患者マスタ'],['tm','療法士マスタ'],['set','設定・パターン'],['io','データ入出力']];
+const TABS=[['gen','作成・結果'],['th','療法士別 予定表'],['pt','患者別 予定'],['un','未割当'],['irr','イレギュラー対応'],['pm','患者マスタ'],['tm','療法士マスタ'],['set','設定・パターン'],['io','データ入出力']];
 function render(){
   rebuildMaps();
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" class="${state.ui.tab===k?'on':''}">${l}</button>`).join('');
-  const f={gen:vGen,th:vTh,pt:vPt,un:vUn,pm:vPm,tm:vTm,set:vSet,io:vIo}[state.ui.tab]||vGen;
+  effCache.clear();
+  const f={gen:vGen,th:vTh,pt:vPt,un:vUn,irr:vIrr,pm:vPm,tm:vTm,set:vSet,io:vIo}[state.ui.tab]||vGen;
   $('#main').innerHTML=f();
   if(state.ui.tab==='pm')renderPmBody();
 }
@@ -484,7 +559,10 @@ function vGen(){
     <div class="scroll" style="max-height:none"><table class="t"><thead><tr><th>日付</th><th>パターン</th><th class="num">対象患者</th><th class="num">休み等</th><th class="num">PT 割当/要求</th><th class="num">OT</th><th class="num">ST</th><th class="num">充足率</th><th class="num">未割当件数</th><th class="num">0単位の患者</th><th class="num">担当外</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="help">日付をクリックすると療法士別の予定表を開きます。「担当外」は担当療法士が出勤しているのに別の人が入った件数です。</p></div>`;
   }
-  return`${state.sample?'<div class="notice">現在は<b>サンプルデータ（患者300名・療法士58名）</b>が入っています。「データ入出力」からCSVで実データを取り込めます。</div>':''}
+  const iss=dataIssues(),ierr=iss.filter(x=>x.lv==='err').length,nr=rulesFor(g.start).length;
+  return`${ierr?`<div class="notice" style="background:#fef2f2;border-color:#fecaca">データに<b>要修正 ${ierr}件</b>があります（${iss.length}件中）。<a href="#" data-act="goIrr">イレギュラー対応 → データチェック</a> で確認・自動修正できます。</div>`:''}
+  ${nr?`<div class="notice">${mdw(g.start)} に効く<b>臨時ルール ${nr}件</b>：${rulesFor(g.start).slice(0,6).map(r=>esc(describeRule(r))).join('／')}${nr>6?' …':''}</div>`:''}
+  ${state.sample?'<div class="notice">現在は<b>サンプルデータ（患者300名・療法士58名）</b>が入っています。「データ入出力」からCSVで実データを取り込めます。</div>':''}
   <div class="grid2"><div>
   <div class="card"><h2>1. 期間を選ぶ</h2>
     <div class="row"><label class="f">開始日<input type="date" data-gen="start" value="${esc(g.start)}"></label>
@@ -513,7 +591,9 @@ function vTh(){
   const disc=state.ui.thDisc;
   const ths=state.therapists.filter(t=>!disc||t.disc===disc);
   const bySt=new Map();day.sessions.forEach(s=>{if(!bySt.has(s.t))bySt.set(s.t,[]);bySt.get(s.t).push(s)});
-  const cols=ths.filter(th=>state.ui.thShowAbsent||day.working.includes(th.id)).map(th=>{
+  const E=effFor(day);
+  const cols=ths.filter(th=>state.ui.thShowAbsent||day.working.includes(th.id)).map(th0=>{
+    const th=E.thM.get(String(th0.id))||th0;
     const works=day.working.includes(th.id);
     const list=(bySt.get(th.id)||[]).slice().sort((a,b)=>a.s-b.s);
     const load=list.reduce((a,s)=>a+s.len,0);const max=(+th.max>0?+th.max:+day.S.thMax)||0;
@@ -543,7 +623,7 @@ function vTh(){
     <button class="b" data-act="regenDay">この日だけ作り直す</button>
     <button class="b" data-act="exportGrid">この表をCSV</button>
     <button class="b" data-act="print">印刷</button></div></div>
-    <p class="help legend">充足率 <b>${(st.rate*100).toFixed(1)}%</b>（${st.asg}/${st.req}単位）　<span>■ドラッグで移動</span><span>■クリックで詳細・固定・削除</span><span style="color:#7c3aed">■紫枠＝固定</span><span class="ng">*＝担当外</span><span>灰色＝勤務外/休憩</span></p>
+    <p class="help legend">充足率 <b>${(st.rate*100).toFixed(1)}%</b>（${st.asg}/${st.req}単位）　<span>■ドラッグで移動</span><span>■クリックで詳細・固定・削除</span><span style="color:#7c3aed">■紫枠＝固定</span><span class="ng">*＝担当外</span><span>灰色＝勤務外/休憩</span><span>📌＝時刻指定</span></p>
     <div><b>未割当 ${un.length}件</b> <span class="muted small">（予定表の空き枠へドラッグして配置／予定をここへドラッグすると外せます）</span>
     <div class="unbox" data-unbox="1">${un.map((u,i)=>{const p=ptById.get(u.p)||{};return`<span class="chip ${u.d} uitem" draggable="true" data-un="${i}" data-p="${esc(u.p)}" data-d="${u.d}" data-len="${u.miss}" title="${esc(u.reason)}">${esc(p.name||u.p)} ${esc(p.ward||'')} ${u.d}×${u.miss}</span>`}).join('')||'<span class="muted small">なし</span>'}</div></div></div>
   <div class="card"><h2 class="onlyprint">${mdw(day.date)} 療法士別 予定表（${esc(day.pattern)}）</h2>
@@ -554,7 +634,7 @@ function sesHtml(s,day,rows,mode){
   const p=ptById.get(s.p)||{name:s.p};const F=frame(day.date,day.S);
   const t0=F.times[s.s]!=null?F.times[s.s]:F.t0;
   const tanto=p['t'+s.disc];const alt=tanto&&tanto!==s.t&&day.working.includes(tanto);
-  return`<span class="ses ${s.disc} ${s.locked?'lock':''} ${alt?'alt':''}" style="height:${(rows||F.k)*rowH(F)-5}px" draggable="true" data-sid="${s.id}" title="${esc(p.name)} ${esc(p.ward||'')}-${esc(p.room||'')}\n${fmt(t0)}-${fmt(t0+s.len*F.u)} ${s.disc} ${s.len}単位${s.locked?' 固定':''}${alt?'\n担当: '+esc((thById.get(tanto)||{}).name||tanto):''}">${mode==='pt'?`<span class="pn">${s.locked?'🔒':''}${s.disc} ${esc((thById.get(s.t)||{}).name||s.t)}</span><span class="pr">${fmt(t0)}-${fmt(t0+s.len*F.u)}</span>`:`<span class="pn">${s.locked?'🔒':''}${esc(p.name)}</span><span class="pr">${esc(p.ward||'')} ${esc(p.room||'')}</span>`}${(rows||F.k)*rowH(F)>=60?`<span class="pr">${mode==='pt'?s.len+'単位':fmt(t0)+'〜 '+s.len+'単位'}</span>`:''}</span>`;
+  return`<span class="ses ${s.disc} ${s.locked?'lock':''} ${s.fixed?'fx':''} ${alt?'alt':''}" style="height:${(rows||F.k)*rowH(F)-5}px" draggable="true" data-sid="${s.id}" title="${esc(p.name)} ${esc(p.ward||'')}-${esc(p.room||'')}\n${fmt(t0)}-${fmt(t0+s.len*F.u)} ${s.disc} ${s.len}単位${s.locked?' 固定':''}${alt?'\n担当: '+esc((thById.get(tanto)||{}).name||tanto):''}">${mode==='pt'?`<span class="pn">${s.locked?'🔒':''}${s.disc} ${esc((thById.get(s.t)||{}).name||s.t)}</span><span class="pr">${fmt(t0)}-${fmt(t0+s.len*F.u)}</span>`:`<span class="pn">${s.locked?'🔒':''}${esc(p.name)}</span><span class="pr">${esc(p.ward||'')} ${esc(p.room||'')}</span>`}${(rows||F.k)*rowH(F)>=60?`<span class="pr">${mode==='pt'?s.len+'単位':fmt(t0)+'〜 '+s.len+'単位'}</span>`:''}</span>`;
 }
 
 function vPt(){
@@ -590,13 +670,13 @@ function vPt(){
 
 function ptViewSel(){return`<label class="f">表示<select data-ui="ptView"><option value="grid" ${state.ui.ptView!=='list'?'selected':''}>時間割（縦＝時刻）</option><option value="list" ${state.ui.ptView==='list'?'selected':''}>一覧</option></select></label>`}
 function vPtGrid(day,F,list,am,byP,wards,q,w){
-  const cols=[];
+  const cols=[],E=effFor(day);
   for(const p of list){
     const req=day.req[p.id],ex=day.excluded&&day.excluded[p.id];
     let short=false,rq=0,as=0;if(req)DISC.forEach(d=>{const r=req[d]||0,a=Math.min(r,am[p.id+'|'+d]||0);rq+=r;as+=a;if(r>a)short=true});
     if(state.ui.ptOnlyShort&&!short)continue;
     const ss=byP.get(p.id)||[];
-    cols.push({p,ex,short,rq,as,av:ptAvail(p,F),startMap:new Map(ss.map(x=>[x.s,x])),until:0});
+    cols.push({p,ex,short,rq,as,av:ptAvail(E.ptM.get(String(p.id))||p,F),startMap:new Map(ss.map(x=>[x.s,x])),until:0});
   }
   const head=`<tr><th class="tm">時刻</th>${cols.map(c=>`<th class="${c.ex?'absent':''}" title="${esc(c.p.name)} ${esc(c.p.id)}"><div class="muted">${esc(c.p.ward)}-${esc(c.p.room)}</div><div class="thn">${esc(c.p.name)}</div><div class="${c.short?'ng':'muted'}">${c.ex?esc(c.ex):c.as+'/'+c.rq+'単位'}</div></th>`).join('')}</tr>`;
   let body='';
@@ -631,7 +711,7 @@ function pickTherapist(day,p,d,s,len){
   const pt=ptById.get(p)||{},tanto=pt['t'+d],load={};
   day.sessions.forEach(x=>load[x.t]=(load[x.t]||0)+x.len);
   const c=state.therapists.filter(t=>t.disc===d&&day.working.includes(t.id)).map(t=>{const r=checkPlace(day,{p,t:t.id,disc:d,s,len},null);return{t,r}}).filter(x=>!x.r.errs.length&&!x.r.warns.length);
-  const lim=t=>(+t.max>0?+t.max:+day.S.thMax)||999;
+  const E=effFor(day),lim=t0=>{const t=E.thM.get(t0.id)||t0;return(+t.max>0?+t.max:+day.S.thMax)||999};
   const ok=c.filter(x=>(load[x.t.id]||0)+len<=lim(x.t));
   ok.sort((a,b)=>(b.t.id===tanto)-(a.t.id===tanto)||(load[a.t.id]||0)-(load[b.t.id]||0));
   return ok.length?ok[0].t.id:null;
@@ -640,12 +720,237 @@ function vUn(){
   const day=curDay();if(!day)return noResult();
   const un=unassignedList(day);
   const reasons={};un.forEach(u=>reasons[u.reason]=(reasons[u.reason]||0)+u.miss);
-  return`<div class="card noprint"><div class="row">${daySelect()}<button class="b" data-act="fillDay">未割当を空きに自動で入れる</button><button class="b" data-act="print">印刷</button></div>
+  const ff=(day.fixFail||[]).map(f=>`<li>${esc((ptById.get(f.p)||{}).name||f.p)} ${f.disc} ${fmt(f.start)}〜 ${f.len}単位${f.t?'（'+esc((thById.get(f.t)||{}).name||f.t)+'指定）':''}：<span class="ng">${esc(f.why)}</span></li>`).join('');
+  return`${ff?`<div class="card"><h2 class="ng">時刻指定が守れなかったもの</h2><ul>${ff}</ul><p class="help">時刻・療法士を変えるか、その時間の他の予定を動かしてから「この日だけ作り直す」をしてください。</p></div>`:''}<div class="card noprint"><div class="row">${daySelect()}<button class="b" data-act="fillDay">未割当を空きに自動で入れる</button><button class="b" data-act="print">印刷</button></div>
   <p class="help">理由別：${Object.entries(reasons).map(([k,v])=>`${esc(k)} ${v}単位`).join(' ／ ')||'なし'}</p>
   <p class="help">対処のヒント：「空き時間が合わない」→ 患者のNG時間・休憩帯・連続上限を見直す／「上限に到達」→ 療法士の上限・人員を見直す、または均等配分パターンを使う。</p></div>
   <div class="card"><h2>${mdw(day.date)} 未割当 ${un.length}件</h2><div class="scroll"><table class="t"><thead><tr><th>病棟</th><th>部屋</th><th>氏名</th><th>職種</th><th class="num">不足単位</th><th>担当</th><th>NG時間</th><th>理由</th></tr></thead><tbody>
   ${un.map(u=>{const p=ptById.get(u.p)||{};const t=thById.get(p['t'+u.d]);return`<tr><td>${esc(p.ward)}</td><td>${esc(p.room)}</td><td>${esc(p.name)}</td><td><span class="tag ${u.d}">${u.d}</span></td><td class="num">${u.miss}</td><td>${esc(t?t.name:'')}${t&&!day.working.includes(t.id)?' <span class="muted">(休)</span>':''}</td><td class="small">${esc(p.ng)}</td><td>${esc(u.reason)}</td></tr>`}).join('')}
   </tbody></table></div></div>`;
+}
+
+/* ================= 予定の検証 ================= */
+function verifyDay(day,weekLoad){
+  const out=[],F=frame(day.date,day.S),E=effFor(day),occ=new Set(),load={},asg={};
+  for(const s of day.sessions){
+    const W=s.len*F.k,th=E.thM.get(s.t),p=E.ptM.get(s.p);
+    const lab=`${mdw(day.date)} ${F.times[s.s]!=null?fmt(F.times[s.s]):'?'} ${(p||{}).name||s.p} ${s.disc} ${(th||{}).name||s.t}`;
+    if(!(s.len>=1&&Number.isInteger(s.len))){out.push(['err','単位数が不正',lab]);continue}
+    if(!(s.s>=0)||s.s+W>F.n){out.push(['err','訓練時間の枠外',lab]);continue}
+    let dup='';for(let k=0;k<W;k++){const a='t'+s.t+'@'+(s.s+k),b='p'+s.p+'@'+(s.s+k);if(occ.has(a))dup='療法士の予定が重複';if(occ.has(b))dup='患者の予定が重複';occ.add(a);occ.add(b)}
+    if(dup)out.push(['err',dup,lab]);
+    if(!th)out.push(['err','療法士が名簿にいない',lab]);
+    else{if(th.disc!==s.disc)out.push(['warn','職種が違う',lab]);if(!day.working.includes(s.t))out.push(['warn','休みの療法士に入っている',lab]);
+      if(thAvail(th,F).slice(s.s,s.s+W).some(v=>!v))out.push(['warn','療法士の勤務時間外・NG・休憩',lab])}
+    if(!p)out.push(['err','患者が名簿にいない',lab]);
+    else{if(!day.req[s.p])out.push(['warn','休止・対象外の患者に入っている',lab]);
+      if(ptAvail(p,F).slice(s.s,s.s+W).some(v=>!v))out.push(['warn','患者のNG時間・休憩',lab])}
+    load[s.t]=(load[s.t]||0)+s.len;const k2=s.p+'|'+s.disc;asg[k2]=(asg[k2]||0)+s.len;
+  }
+  for(const t in load){const th=E.thM.get(t),mx=th&&+th.max>0?+th.max:+day.S.thMax;
+    if(mx>0&&load[t]>mx)out.push(['warn','療法士の1日上限超過',`${mdw(day.date)} ${(th||{}).name||t} ${load[t]}/${mx}単位`]);
+    const wm=+day.S.thWeekMax;if(weekLoad&&wm>0&&(weekLoad[t]||0)+load[t]>wm)out.push(['warn','療法士の週上限超過',`${mdw(day.date)} ${(th||{}).name||t}`])}
+  for(const k in asg){const[pp,d]=k.split('|'),r=(day.req[pp]||{})[d]||0;if(asg[k]>r)out.push(['warn','予定より多い単位',`${mdw(day.date)} ${(E.ptM.get(pp)||{}).name||pp} ${d} ${asg[k]}/${r}`])}
+  return out;
+}
+function verifyAll(){
+  if(!state.result)return[];const out=[];let wk=null,load={};
+  state.result.days.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(d=>{if(mondayOf(d.date)!==wk){wk=mondayOf(d.date);load={}}out.push(...verifyDay(d,load));d.sessions.forEach(s=>load[s.t]=(load[s.t]||0)+s.len)});
+  return out;
+}
+
+/* ================= データチェック ================= */
+function badTokens(str,isDate){return z2h(str).split(/[,、;；\s]+/).map(x=>x.trim()).filter(Boolean).filter(x=>isDate?!validDate(normDate(x)):!parseRanges(x).length)}
+function dataIssues(){
+  const I=[],add=(lv,msg,fix)=>I.push({lv,msg,fix}),S=state.settings;
+  const t0=toMin(S.start),t1=toMin(S.end);
+  if(isNaN(t0)||isNaN(t1)||t1<=t0)add('err',`設定：訓練時間「${S.start}〜${S.end}」が正しくありません`,()=>{S.start='09:00';S.end='17:00'});
+  const u=Math.round(+S.unit);if(!(u>=5&&u<=240))add('err','設定：1単位の分数が不正です',()=>{S.unit=20});
+  else if(+S.step&&u%+S.step)add('warn',`設定：時間刻み${S.step}分が1単位${u}分を割り切れません（${u}分刻みで動作）`,()=>{S.step=u%5?u:5});
+  if(badTokens(S.breaks).length)add('warn',`設定：休憩帯に読めない部分「${badTokens(S.breaks).join(' ')}」`,()=>{S.breaks=rangesStr(parseRanges(S.breaks))});
+  if(!validDate(state.gen.start))add('err','作成の開始日が正しくありません',()=>{state.gen.start=ymd(new Date())});
+  const dupFix=(list,pfx)=>{const seen=new Set();list.forEach((o,i)=>{let id=String(o.id==null?'':o.id).trim();if(!id)id=pfx+(i+1);let n=2,b=id;while(seen.has(id))id=b+'_'+n++;o.id=id;seen.add(id)})};
+  const chkDup=(list,name,pfx)=>{const c={};let empty=0;list.forEach(o=>{const id=String(o.id==null?'':o.id).trim();if(!id)empty++;else c[id]=(c[id]||0)+1});
+    const d=Object.keys(c).filter(k=>c[k]>1);if(d.length)add('err',`${name}：IDの重複 ${d.slice(0,8).join(', ')}${d.length>8?' …':''}（2件目以降は無視されます）`,()=>dupFix(list,pfx));
+    if(empty)add('err',`${name}：IDが空欄 ${empty}件（無視されます）`,()=>dupFix(list,pfx))};
+  chkDup(state.therapists,'療法士','T');chkDup(state.patients,'患者','P');
+  const thIds=new Map(state.therapists.map(t=>[String(t.id).trim(),t]));
+  state.therapists.forEach(t=>{const nm=`療法士 ${t.id} ${t.name||''}`;
+    const dc=String(t.disc||'').trim().toUpperCase();
+    if(!DISC.includes(dc))add('err',`${nm}：職種「${t.disc}」が PT/OT/ST ではありません（予定に入りません）`);
+    else if(dc!==t.disc)add('warn',`${nm}：職種の表記ゆれ「${t.disc}」`,()=>{t.disc=dc});
+    const a=toMin(t.start),b=toMin(t.end);
+    if((t.start&&isNaN(a))||(t.end&&isNaN(b))||(!isNaN(a)&&!isNaN(b)&&b<=a))add('err',`${nm}：勤務時間「${t.start}〜${t.end}」が正しくありません`,()=>{t.start='';t.end=''});
+    else if(!isNaN(a)&&!isNaN(b)&&!isNaN(t0)&&(b<=t0||a>=t1))add('warn',`${nm}：勤務時間が訓練時間と重なりません`);
+    if(badTokens(t.ng).length)add('warn',`${nm}：NG時間に読めない部分「${badTokens(t.ng).join(' ')}」`,()=>{t.ng=rangesStr(parseRanges(t.ng))});
+    if(badTokens(t.offDates,true).length)add('warn',`${nm}：休暇日に読めない日付「${badTokens(t.offDates,true).join(' ')}」`,()=>{t.offDates=splitList(t.offDates).filter(validDate).join(',')});
+    if(/[^日月火水木金土\s,、]/.test(String(t.offDays||'')))add('warn',`${nm}：休日曜日に曜日以外の文字「${t.offDays}」`,()=>{t.offDays=String(t.offDays).replace(/[^日月火水木金土]/g,'')});
+    if(t.max!==''&&t.max!=null&&!(parseInt(z2h(t.max))>=0))add('warn',`${nm}：1日上限「${t.max}」が数字ではありません`,()=>{t.max=''});
+  });
+  let noUnit=0;
+  state.patients.forEach(p=>{const nm=`患者 ${p.id} ${p.name||''}`;let sum=0;
+    DISC.forEach(d=>{const k=d.toLowerCase(),v=p[k];const n=parseInt(z2h(v));
+      if(v!==''&&v!=null&&(isNaN(n)||n<0||String(n)!==z2h(String(v)).trim()))add('warn',`${nm}：${d}単位「${v}」を ${Math.max(0,n||0)} として扱います`,()=>{p[k]=String(Math.max(0,n||0))});
+      sum+=Math.max(0,n||0);
+      const tt=String(p['t'+d]||'').trim();
+      if(tt){const th=thIds.get(tt);if(!th){const byName=state.therapists.find(x=>String(x.name||'').replace(/\s/g,'')===tt.replace(/\s/g,''));
+          add('warn',`${nm}：担当${d}「${tt}」が療法士名簿にいません`,()=>{p['t'+d]=byName?byName.id:''})}
+        else if(String(th.disc).toUpperCase()!==d)add('warn',`${nm}：担当${d}「${th.name}」の職種が${th.disc}です`,()=>{p['t'+d]=''})}});
+    if(!sum&&!p.paused)noUnit++;
+    if(+S.ptMax>0&&sum>+S.ptMax)add('info',`${nm}：合計${sum}単位が患者上限${S.ptMax}を超えるため自動で減らします`);
+    if(/[^日月火水木金土]/.test(String(p.days||'').replace(/[\s,、]/g,'')))add('warn',`${nm}：実施曜日に曜日以外の文字「${p.days}」`,()=>{p.days=String(p.days).replace(/[^日月火水木金土]/g,'')});
+    if(badTokens(p.ng).length)add('warn',`${nm}：NG時間に読めない部分「${badTokens(p.ng).join(' ')}」`,()=>{p.ng=rangesStr(parseRanges(p.ng))});
+    else if(!isNaN(t0)&&parseRanges(p.ng).some(r=>r[0]<=t0&&r[1]>=t1))add('warn',`${nm}：NG時間が訓練時間全体を覆っています（予定が入りません）`);
+    if(badTokens(p.offDates,true).length)add('warn',`${nm}：休止日に読めない日付`,()=>{p.offDates=splitList(p.offDates).filter(validDate).join(',')});
+    if(p.priority!==''&&p.priority!=null&&!['1','2','3'].includes(z2h(String(p.priority)).trim()))add('warn',`${nm}：優先度「${p.priority}」は1〜3で指定します`,()=>{p.priority=String(Math.min(3,Math.max(1,parseInt(z2h(p.priority))||2)))});
+    if(p.prefer&&!['午前','午後'].includes(p.prefer))add('warn',`${nm}：希望時間帯「${p.prefer}」`,()=>{p.prefer=/午前|AM/i.test(p.prefer)?'午前':/午後|PM/i.test(p.prefer)?'午後':''});
+  });
+  if(noUnit)add('info',`単位数が0の患者が${noUnit}名います（予定は作られません）`);
+  const ptIds=new Set(state.patients.map(p=>String(p.id).trim())),wards=new Set(state.patients.map(p=>String(p.ward).trim()));
+  (state.rules||[]).forEach((r,i)=>{if(r.on===false)return;const nm=`臨時ルール${i+1}（${describeRule(r)}）`,k=String(r.key||'').trim();
+    if(r.target==='pt'&&!ptIds.has(k))add('warn',`${nm}：患者ID「${k}」がいません`);
+    if(r.target==='th'&&!thIds.has(k))add('warn',`${nm}：療法士ID「${k}」がいません`);
+    if(r.target==='ward'&&!wards.has(k))add('warn',`${nm}：病棟「${k}」の患者がいません`);
+    if(r.target==='disc'&&!DISC.includes(k.toUpperCase()))add('warn',`${nm}：職種「${k}」はPT/OT/STで指定します`);
+    if(['ng','hours'].includes(r.action)&&!parseRanges(r.time).length)add('warn',`${nm}：時間「${r.time||''}」を「10:00-11:00」の形で入力してください`);
+    if(r.action==='fix'&&(!DISC.includes(r.disc)||(isNaN(toMin(r.time))&&!parseRanges(r.time).length)))add('warn',`${nm}：時刻指定には職種と時刻が必要です`);
+    if(r.action==='tanto'&&(!DISC.includes(r.disc)||(r.th&&!thIds.has(String(r.th).trim()))))add('warn',`${nm}：担当変更には職種と療法士IDが必要です`);
+    if(['units','cap','priority'].includes(r.action)&&isNaN(parseInt(z2h(r.value))))add('warn',`${nm}：値「${r.value||''}」が数字ではありません`);
+    const f=normDate(z2h(r.from||'').trim()),t=normDate(z2h(r.to||'').trim());
+    if((f&&!validDate(f))||(t&&!validDate(t)))add('warn',`${nm}：日付が正しくありません`);
+    else if(f&&t&&t<f)add('warn',`${nm}：終了日が開始日より前です`);
+  });
+  return I;
+}
+
+/* ================= イレギュラー対応（臨時ルール） ================= */
+const RT={all:'全体',ward:'病棟',pt:'患者',th:'療法士',disc:'職種'};
+const RA={off:'休み・休止',ng:'NG時間を追加',hours:'時間を変更（遅刻・早退・短縮）',units:'単位数を変更',cap:'上限単位を変更',tanto:'担当を変更',prefer:'希望時間帯',priority:'優先度',fix:'時刻指定（この時間に実施）'};
+const TEMPL=[
+  ['療法士の急な欠勤',{target:'th',action:'off'}],
+  ['療法士の遅刻・早退',{target:'th',action:'hours',time:'10:00-15:00'}],
+  ['療法士の会議・研修・委員会',{target:'th',action:'ng',time:'16:00-17:00'}],
+  ['療法士の応援・兼務で減らす',{target:'th',action:'cap',value:'12'}],
+  ['職種全体の勉強会',{target:'disc',key:'PT',action:'ng',time:'16:20-17:00'}],
+  ['職種の人数不足（全員減単位）',{target:'disc',key:'OT',action:'units',value:'-1'}],
+  ['患者の検査・受診・透析',{target:'pt',action:'ng',time:'10:00-11:00'}],
+  ['患者の外出・外泊・退院日',{target:'pt',action:'off'}],
+  ['患者の体調不良（減単位）',{target:'pt',action:'units',disc:'PT',value:'-1'}],
+  ['患者の増単位',{target:'pt',action:'units',disc:'PT',value:'+1'}],
+  ['患者の午前だけ可・午後だけ可',{target:'pt',action:'hours',time:'09:00-12:00'}],
+  ['家族見学・装具採型などの時刻指定',{target:'pt',action:'fix',disc:'PT',time:'14:00',value:'2'}],
+  ['担当の一時変更',{target:'pt',action:'tanto',disc:'PT'}],
+  ['患者の1日上限を下げる',{target:'pt',action:'cap',value:'3'}],
+  ['病棟の入浴日・行事・回診',{target:'ward',key:'',action:'ng',time:'10:00-11:00'}],
+  ['病棟閉鎖（感染症など）',{target:'ward',key:'',action:'off'}],
+  ['病棟全体の減単位',{target:'ward',key:'',action:'units',value:'-1'}],
+  ['全体行事・避難訓練・停電',{target:'all',action:'ng',time:'15:00-16:00'}],
+  ['全体の訓練時間短縮',{target:'all',action:'hours',time:'09:00-15:00'}],
+  ['全体の患者上限を変更',{target:'all',action:'cap',value:'6'}],
+];
+function describeRule(r){
+  const f=r.from||'',t=r.to||'';
+  const when=!f&&!t?'毎日':(f&&(!t||t===f)?f:`${f||'…'}〜${t||'…'}`)+(r.wd?`（${r.wd}）`:'');
+  const who=r.target==='all'?'全体':`${RT[r.target]||'?'}「${r.key||'未指定'}」`;
+  const det=[r.disc,r.time,r.value,r.th?'療法士'+r.th:''].filter(Boolean).join(' ');
+  return`${when} ${who}：${RA[r.action]||'?'} ${det}`.trim();
+}
+function vIrr(){
+  const rules=state.rules||[];
+  const keyDl=`<datalist id="dlKey">${state.patients.slice(0,2000).map(p=>`<option value="${esc(p.id)}">${esc(p.name)} 患者</option>`).join('')}${state.therapists.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} ${esc(t.disc)}</option>`).join('')}${[...new Set(state.patients.map(p=>p.ward))].map(w=>`<option value="${esc(w)}">病棟</option>`).join('')}${DISC.map(d=>`<option value="${d}">職種</option>`).join('')}</datalist>
+    <datalist id="dlThAll">${state.therapists.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} ${esc(t.disc)}</option>`).join('')}</datalist>`;
+  const sel=(i,k,opts,v)=>`<select data-r="${i}" data-k="${k}">${opts.map(([a,b])=>`<option value="${a}" ${String(v||'')===a?'selected':''}>${b}</option>`).join('')}</select>`;
+  const inp=(i,k,v,extra)=>`<input data-r="${i}" data-k="${k}" value="${esc(v||'')}" ${extra||''}>`;
+  const rows=rules.map((r,i)=>`<tr><td><input type="checkbox" data-r="${i}" data-k="on" ${r.on!==false?'checked':''}></td>
+    <td>${inp(i,'from',r.from,'type="date"')}</td><td>${inp(i,'to',r.to,'type="date"')}</td><td>${inp(i,'wd',r.wd,'placeholder="例:月水"')}</td>
+    <td>${sel(i,'target',Object.entries(RT),r.target)}</td><td>${inp(i,'key',r.key,'list="dlKey" placeholder="ID/病棟/職種"')}</td>
+    <td>${sel(i,'action',Object.entries(RA),r.action)}</td><td>${sel(i,'disc',[['','—'],...DISC.map(d=>[d,d])],r.disc)}</td>
+    <td>${inp(i,'time',r.time,'placeholder="10:00-11:00"')}</td><td>${inp(i,'value',r.value,'placeholder="2 / -1 / 午前"')}</td>
+    <td>${inp(i,'th',r.th,'list="dlThAll"')}</td><td>${inp(i,'note',r.note)}</td><td><button class="b s d" data-act="delRule" data-i="${i}">削除</button></td></tr>`).join('');
+  const pd=state.ui.irrDate||state.gen.start;const act=rulesFor(pd);
+  const iss=dataIssues();const cnt={err:0,warn:0,info:0};iss.forEach(x=>cnt[x.lv]++);
+  const ver=state.result?verifyAll():null;
+  return`${keyDl}<div class="card"><h2>臨時ルール（その日だけ・期間限定のイレギュラー）</h2>
+  <p class="help">「いつ × 誰に（全体・病棟・患者・療法士・職種）× 何をする」の組み合わせで、ほとんどのイレギュラーを登録できます。予定を作るときに自動で反映されます。<br>
+  期間：開始日だけ＝その日だけ／開始日と終了日＝期間／両方空欄＝毎日。曜日に「月水」と入れるとその曜日だけ。</p>
+  <h3>よくあるイレギュラーから追加</h3><div class="tpl">${TEMPL.map(([l],i)=>`<button class="b s" data-act="addRule" data-i="${i}">＋${l}</button>`).join('')}</div>
+  <div class="scroll" style="margin-top:10px"><table class="t irr"><thead><tr><th>有効</th><th style="min-width:120px">開始日</th><th style="min-width:120px">終了日</th><th style="min-width:60px">曜日</th><th style="min-width:80px">対象</th><th style="min-width:90px">対象ID等</th><th style="min-width:150px">内容</th><th style="min-width:55px">職種</th><th style="min-width:100px">時間</th><th style="min-width:70px">値</th><th style="min-width:70px">療法士</th><th style="min-width:100px">メモ</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan="13" class="muted">まだありません。上のボタンから追加してください。</td></tr>'}</tbody></table></div>
+  <div class="row" style="margin-top:8px"><button class="b" data-act="addRule" data-i="-1">＋空のルール</button><button class="b" data-act="cleanRules">期限切れのルールを削除</button></div>
+  <h3>確認：<input type="date" data-ui="irrDate" value="${esc(pd)}"> に効くルール ${act.length}件</h3>
+  <ul class="small">${act.map(r=>`<li>${esc(describeRule(r))}</li>`).join('')||'<li class="muted">なし</li>'}</ul></div>
+
+  <div class="card"><h2>データチェック <span class="small"><span class="ng">要修正 ${cnt.err}</span>　<span class="warn">注意 ${cnt.warn}</span>　<span class="muted">情報 ${cnt.info}</span></span></h2>
+  <div class="row"><button class="b p" data-act="autofix">自動修正できるもの（${iss.filter(x=>x.fix).length}件）をすべて修正</button></div>
+  <ul class="iss small">${iss.slice(0,400).map(x=>`<li class="${x.lv==='err'?'ng':x.lv==='warn'?'warn':'muted'}">${x.lv==='err'?'✖':x.lv==='warn'?'▲':'・'} ${esc(x.msg)}${x.fix?' <span class="muted">［自動修正可］</span>':''}</li>`).join('')||'<li class="ok">問題は見つかりませんでした</li>'}${iss.length>400?`<li>…ほか${iss.length-400}件</li>`:''}</ul></div>
+
+  <div class="card"><h2>作成済み予定の検証</h2>
+  ${ver==null?'<p class="muted">予定がまだありません。</p>':`<p>${ver.length?`<span class="warn">${ver.length}件の注意があります（手動で動かした予定など）</span>`:'<span class="ok">重複・時間外・上限超過などの問題はありません</span>'}</p>
+  <ul class="iss small">${ver.slice(0,300).map(([lv,m,l])=>`<li class="${lv==='err'?'ng':'warn'}">${esc(m)}：${esc(l)}</li>`).join('')}</ul>`}</div>
+
+  <div class="card"><h2>自己テスト（ランダムなイレギュラーで壊れないかを確認）</h2>
+  <p class="help">勤務時間の入力ミス・全角数字・IDの重複・存在しない担当・全員欠勤・患者0人・NG時間だらけ・ありえない設定値・臨時ルールの大量の組み合わせ などをランダムに作り、毎回「エラーで止まらない」「療法士・患者の重複なし」「勤務時間外・NG時間・休憩に入らない」「休み・休止の人に入らない」「1日・週の上限を超えない」「予定単位を超えない」「職種が一致」を自動で確認します。今のデータは変更されません。</p>
+  <div class="row"><select id="fzN"><option>100</option><option>1000</option><option selected>10000</option></select><button class="b p" data-act="fuzz">テスト実行</button><span id="fzOut" class="small"></span></div></div>`;
+}
+
+/* ================= 自己テスト（ランダムなイレギュラー） ================= */
+function fuzzScenario(seed){
+  const r=mulberry32(seed),pk=a=>a[Math.floor(r()*a.length)],ch=x=>r()<x;
+  const bad=r()<0.15?0.25:0.05; // 4件に1件は「入力ミスだらけ」のシナリオ
+  const gb=(ok,ng)=>ch(bad)?pk(ng):pk(ok);
+  const BT=['','abc','25:00','０９：００','9:5','23:59','00:00'],BR=['xx','13:00-12:00','9:00-9:00','00:00-23:59','１０：００－１１：００','15:00〜15:40','10:00-10:40、11:00-11:20'];
+  const OKR=['','','','10:00-10:40','14:00-14:40','10:00-10:40,14:00-14:40','09:00-13:00','11:05-11:50','13:20-14:00','15:00-15:40','16:00-17:00','09:30-10:15'];
+  const D=['PT','OT','ST'],date=ymd(new Date(2026,Math.floor(r()*14),1+Math.floor(r()*28)));
+  const S={...defaultSettings(),unit:gb([20,20,20,20,10,15,30,40],[0,'abc',7,1000]),step:gb([5,5,10,20,15],[0,3,'x']),genStep:pk([0,0,0,5,10,20,7]),
+    start:gb(['09:00','09:00','08:30','10:00','13:00'],BT),end:gb(['17:00','17:30','16:00','12:00','18:00','15:00'],['','08:00','25:00','09:00']),breaks:gb(['12:00-13:00','12:00-13:00','','12:00-12:40,15:00-15:20'],BR),
+    ptMax:pk([9,9,6,3,1,20,0]),thMax:pk([21,21,24,10,1,0,'']),thWeekMax:pk([108,108,50,20,5,0]),cap:pk([0,0,0,1,2]),minPriority:pk(['3','3','3','2','1']),
+    continuous:ch(.7),blockMax:pk([3,3,2,1,6,0]),allowSplit:ch(.7),maxConsec:pk([0,6,6,3,2]),minGap:pk([0,0,0,1,2]),
+    tanto:pk(['prefer','prefer','strict','ignore']),strategy:pk(['priority','equal']),minGuarantee:pk([1,1,2,5,0]),timeBias:pk(['spread','early','late']),
+    balance:pk([0,1,1,3]),iterations:pk([1,1,2]),randomness:pk([0,3,3,10])};
+  const nT=pk([0,1,3,10,30,30,30,58,58,58,58,58]),nP=pk([0,1,5,30,60,120,300,300,300,300,300,300]);
+  const ths=[];for(let i=0;i<nT;i++){const d=ch(bad/2)?pk(['pt','','XX','ＰＴ']):pk(D);
+    ths.push({id:ch(bad/3)&&ths.length?pk(ths).id:(ch(bad/4)?'':d+i),name:'T'+i,disc:d,start:gb(['08:30','08:30','09:00','10:00','13:00',''],BT),end:gb(['17:30','17:30','17:00','13:00','16:30',''],['08:00','24:00','abc']),
+      offDays:gb(['','日','日土','','水'],['月火水木金土日','abc']),offDates:ch(.05)?gb([date,date+',2099-01-01'],['2026/1/5','x']):'',ng:gb(OKR,BR),max:gb(['','','','10','15'],['0','x','30']),absent:ch(.08)})}
+  const sameDisc=d=>{const L=ths.filter(t=>t.disc===d);return L.length?pk(L).id:''};
+  const tid=d=>ch(bad)?pk(['NONE','x',ths.length?pk(ths).id:'']):(ch(.8)?sameDisc(d):'');
+  const wards=['2A','2B','3A','3B'];
+  const U=['0','1','2','2','3','3','',1,2];const UB=['-1','x','12','1.5','２',null];
+  const pts=[];for(let i=0;i<nP;i++)pts.push({id:ch(bad/3)&&pts.length?pk(pts).id:(ch(bad/4)?'':'P'+i),name:'P'+i,ward:ch(bad/3)?'':pk(wards),room:String(i),
+    pt:gb(U,UB),ot:gb(U,UB),st:gb(['0','0','0','1','2'],UB),tPT:tid('PT'),tOT:tid('OT'),tST:tid('ST'),days:gb(['','月火水木金土日','月火水木金土','月火水木金'],['土日','abc','日']),ng:gb(OKR,BR),
+    prefer:gb(['','','','午前','午後'],['AM','x']),priority:gb(['1','2','2','2','3'],['','0','9','２']),paused:ch(.03),offDates:ch(.03)?date:'',note:''});
+  const keyFor=t=>ch(bad)?pk(['nobody','','zz']):t==='pt'?(pts.length?pk(pts).id:''):t==='th'?(ths.length?pk(ths).id:''):t==='ward'?pk(wards):t==='disc'?pk(D):'';
+  const rules=[];const nR=pk([0,1,3,10,10,30,60]);
+  const VAL={off:[''],ng:[''],hours:[''],units:['1','2','-1','+1','0','+2','-5'],cap:['0','1','3','6','12'],tanto:[''],prefer:['午前','午後',''],priority:['1','2','3'],fix:['1','2','3','']};
+  for(let i=0;i<nR;i++){const target=pk(Object.keys(RT));let action=pk(Object.keys(RA));if(action==='off'&&(target==='all'||target==='ward')&&!ch(.15))action='ng';
+    const tm=action==='fix'?gb(['09:00','10:00','13:20','14:00','15:40','10:05','09:00-09:40'],['x','25:00','07:00']):gb(['10:00-11:00','09:00-12:00','13:00-17:00','16:00-17:00','14:20-15:00','10:00-15:00'],BR);
+    rules.push({on:ch(.9),from:pk(['','',date,date,'2026-01-01',ch(bad)?'bad':date]),to:pk(['','','',date,'2027-12-31','2025-01-01']),wd:pk(['','','','月','日土','月火水木金土日']),
+      target,key:keyFor(target),action,disc:ch(bad)?'':pk(D),time:tm,value:gb(VAL[action],['x','３','9']),th:action==='tanto'||action==='fix'&&ch(.4)?(ths.length?pk(ths).id:''):''})}
+  const wl={};ths.forEach(t=>{if(ch(.3))wl[t.id]=Math.floor(r()*120)});
+  return{S,ths,pts,rules,date,wl,absent:ch(.1)&&ths.length?new Set([pk(ths).id]):null,paused:ch(.1)&&pts.length?new Set([pk(pts).id]):null,doLock:ch(.2),doRender:seed%25===0};
+}
+function fuzzOne(seed){
+  const sc=fuzzScenario(seed);
+  state.settings=sc.S;state.therapists=sc.ths;state.patients=sc.pts;state.rules=sc.rules;effCache.clear();rebuildMaps();
+  const run=pre=>{const ctx=makeCtx(sc.date,sc.S,sc.absent,sc.paused);const res=solveBest(ctx,pre,sc.wl,seed);
+    const req={};ctx.pts.forEach(p=>req[p.id]={...p.units});
+    return{date:sc.date,pattern:'test',S:ctx.S,sessions:res.sessions.map((s,i)=>({...s,id:i+1})),nextId:res.sessions.length+1,req,reasons:res.reasons,excluded:ctx.excluded,working:ctx.ths.map(t=>t.id),fixFail:res.fixFail}};
+  let day=run([]);
+  if(sc.doLock&&day.sessions.length){const pre=day.sessions.filter((_,i)=>i%3===0).map(s=>({...s,locked:true}));day=run(pre);
+    const kept=pre.filter(L=>day.sessions.some(s=>s.p===L.p&&s.t===L.t&&s.s===L.s&&s.locked));if(kept.length!==pre.length)return['固定した予定が消えた'];}
+  const v=verifyDay(day,sc.wl).map(x=>x[1]+'：'+x[2]);
+  if(sc.doRender){state.result={days:[day],created:''};state.ui.day=day.date;vTh();vPt();vUn();vIrr();vGen();state.ui.ptView='list';vPt();state.ui.ptView='grid'}
+  return v;
+}
+function runFuzz(N,onProgress,onDone){
+  const backup=JSON.stringify(state),realSave=save;save=()=>{};
+  let i=0,fail=[],t0=performance.now();
+  const step=()=>{
+    const end=Math.min(N,i+50);
+    for(;i<end;i++){try{const v=fuzzOne(i+1);if(v.length)fail.push({seed:i+1,msg:v.slice(0,3).join(' / ')})}catch(e){fail.push({seed:i+1,msg:'例外: '+e.message})}}
+    onProgress(i,fail.length);
+    if(i<N)setTimeout(step,0);
+    else{state=JSON.parse(backup);save=realSave;effCache.clear();rebuildMaps();onDone(fail,(performance.now()-t0)/1000)}
+  };step();
 }
 
 /* ---- マスタ ---- */
@@ -797,7 +1102,7 @@ function checkPlace(day,{p,t,disc,s,len},ignoreId){
   const W=len*F.k;
   if(s<0||s+W>F.n)errs.push('訓練時間の枠を超えています');
   for(const o of day.sessions){if(o.id===ignoreId)continue;if(o.s<s+W&&s<o.s+o.len*F.k){if(o.t===t)errs.push('療法士の予定が重なります');if(o.p===p)errs.push('患者の予定が重なります')}}
-  const th=thById.get(t),pt=ptById.get(p);
+  const E=effFor(day),th=E.thM.get(t),pt=E.ptM.get(p);
   if(th&&th.disc!==disc)warns.push(`職種が違います（療法士:${th.disc} / 訓練:${disc}）`);
   if(th){const av=thAvail(th,F);for(let k=0;k<W;k++)if(!av[s+k]){warns.push('療法士の勤務時間外・休憩・NG時間を含みます');break}
     if(!day.working.includes(t))warns.push('この療法士は作成時に休みでした')}
@@ -853,7 +1158,20 @@ function sesDialog(sid){
 /* ================= イベント ================= */
 const ACT={
   goGen(){state.ui.tab='gen';render()},
-  generate(){busy(true);setTimeout(()=>{try{const t=performance.now();const dr=generateAll();save();render();toast(`作成しました（${((performance.now()-t)/1000).toFixed(1)}秒）`+(dr?` 固定予定${dr}件は条件が合わず外れました`:''))}catch(e){console.error(e);alert('エラー: '+e.message)}finally{busy(false)}},30)},
+  goIrr(el,e){e.preventDefault();state.ui.tab='irr';render()},
+  addRule(el){const i=+el.dataset.i;const base={on:true,from:state.gen.start,to:'',wd:'',target:'pt',key:'',action:'ng',disc:'',time:'',value:'',th:'',note:''};
+    const t=i>=0?TEMPL[i]:null;state.rules.push({...base,...(t?t[1]:{}),note:t?t[0]:''});save();render();toast('追加しました。対象ID等を入力してください')},
+  delRule(el){state.rules.splice(+el.dataset.i,1);save();render()},
+  cleanRules(){const today=ymd(new Date());const n=state.rules.length;state.rules=state.rules.filter(r=>{const t=normDate(z2h(r.to||r.from||'').trim());return!t||!validDate(t)||t>=today});save();render();toast(`${n-state.rules.length}件削除しました`)},
+  autofix(){const fx=dataIssues().filter(x=>x.fix);if(!fx.length){toast('自動修正できるものはありません');return}
+    if(!confirm(`${fx.length}件を自動修正します。よろしいですか？（念のため先にJSONバックアップをおすすめします）`))return;
+    fx.forEach(x=>{try{x.fix()}catch(e){}});state.sample=false;save();render();toast(`${fx.length}件を修正しました`)},
+  fuzz(){const N=+$('#fzN').value;const out=$('#fzOut');busy(false);
+    runFuzz(N,(i,f)=>{out.textContent=`実行中… ${i}/${N}件（失敗 ${f}件）`},(fail,sec)=>{
+      render();const o=$('#fzOut');if(!o)return;
+      o.innerHTML=fail.length?`<span class="ng">${N}件中 ${fail.length}件で問題</span>：${fail.slice(0,5).map(f=>`#${f.seed} ${esc(f.msg)}`).join('<br>')}`:`<b class="ok">${N}件すべて合格</b>（${sec.toFixed(1)}秒）`;
+      window.__fuzz={N,fail,sec}})},
+  generate(){if(!validDate(state.gen.start)){toast('開始日を正しく入力してください');return}busy(true);setTimeout(()=>{try{const t=performance.now();const dr=generateAll();save();render();toast(`作成しました（${((performance.now()-t)/1000).toFixed(1)}秒）`+(dr?` 固定予定${dr}件は条件が合わず外れました`:''))}catch(e){console.error(e);alert('エラー: '+e.message)}finally{busy(false)}},30)},
   openDay(el,e){e.preventDefault();state.ui.day=el.dataset.date;state.ui.tab='th';render()},
   togAbsent(el){const t=thById.get(el.dataset.id);t.absent=!t.absent;save();render()},
   regenDay(){if(!confirm('この日の予定を作り直します（固定した予定は残ります）。よろしいですか？'))return;busy(true);setTimeout(()=>{regenDay(curDay().date,false);save();render();busy(false);toast('作り直しました')},30)},
@@ -919,6 +1237,7 @@ document.addEventListener('change',e=>{
   const el=e.target,ds=el.dataset;
   if(ds.ui){state.ui[ds.ui]=el.type==='checkbox'?el.checked:el.value;save();if(ds.ui==='mq'||ds.ui==='mWard'){renderPmBody();return}render();return}
   if(ds.gen){state.gen[ds.gen]=ds.gen==='days'?+el.value:el.value;save();render();return}
+  if(ds.r!=null){const r=state.rules[+ds.r];if(r){r[ds.k]=el.type==='checkbox'?el.checked:el.value;save();render()}return}
   if(ds.wdp!=null){state.gen.wdPattern[ds.wdp]=el.value;save();render();return}
   if(ds.set){const f=SF.find(x=>x[0]===ds.set);let v=el.type==='checkbox'?el.checked:el.value;if(f&&f[2]==='n'||ds.set==='step'||ds.set==='genStep')v=+v||0;state.settings[ds.set]=v;save();return}
   if(ds.m){const list=ds.m==='p'?state.patients:state.therapists;const o=list[+ds.i];const old=o[ds.k];o[ds.k]=el.type==='checkbox'?el.checked:el.value;
