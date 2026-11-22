@@ -130,7 +130,7 @@ table.wrapc td:first-child{min-width:7.5em}
 <div class="wrap">
   <header>
     <h1>Gait Tester</h1>
-    <div class="row" style="margin-top:6px"><button class="small primary" id="bInstall">アプリとしてインストール</button><a class="small" id="manualLink" href="manual.html" style="color:var(--accent)">手動デジタイズ版を開く</a></div>
+    <div class="row" style="margin-top:6px"><button class="small primary" id="bInstall">アプリとしてインストール</button><a class="small" id="manualLink" href="manual.html" style="color:var(--accent)">手動デジタイズ版を開く</a><button class="small" id="bDemo" hidden>デモを見る（合成データ）</button></div>
     <div class="warn" id="installHelp" hidden></div>
     <p>前後左右から撮影した最大4本の歩行動画を解析します。動画は端末の外に送信されません。</p>
   </header>
@@ -651,10 +651,34 @@ function drawSkeleton(vctx,W,s,i,lw0){
 }
 
 /* ---------- AI ---------- */
+/* ---------- 内蔵データ（オフライン版：AIとデモをこのファイルに埋め込んだもの） ---------- */
+const EMBEDDED=!!document.getElementById('gt-wasm');
+const embHas=id=>!!document.getElementById(id);
+async function unpack(id){
+  const el=document.getElementById(id);if(!el)return null;
+  const b=atob(el.textContent.trim()),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);
+  if(el.dataset.gzip!=='1')return u.buffer;
+  return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+}
+const b64u8=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
+let embCore=null;
+async function embeddedLandmarker(kind,say){
+  say('内蔵のAIを準備中…');
+  if(!embCore){const[lib,loader,wasm]=await Promise.all([unpack('gt-lib'),unpack('gt-loader'),unpack('gt-wasm')]);
+    embCore={mp:await import(URL.createObjectURL(new Blob([lib],{type:'text/javascript'}))),
+      fs:{wasmLoaderPath:URL.createObjectURL(new Blob([loader],{type:'text/javascript'})),wasmBinaryPath:URL.createObjectURL(new Blob([wasm],{type:'application/wasm'}))}};}
+  const model=new Uint8Array(await unpack('gt-model-'+kind));
+  const opt=d=>({baseOptions:{modelAssetBuffer:model,delegate:d},runningMode:'VIDEO',numPoses:1,minPoseDetectionConfidence:0.5,minPosePresenceConfidence:0.5,minTrackingConfidence:0.5});
+  try{return await embCore.mp.PoseLandmarker.createFromOptions(embCore.fs,opt('GPU'));}
+  catch(e){return await embCore.mp.PoseLandmarker.createFromOptions(embCore.fs,opt('CPU'));}
+}
 async function getLandmarker(kind,say){
   if(landmarker&&lmKind===kind)return landmarker;
   if(landmarker){try{landmarker.close();}catch(e){}landmarker=null;}
   let lastErr;
+  if(embHas('gt-model-'+kind)){
+    try{landmarker=await embeddedLandmarker(kind,say);lmKind=kind;return landmarker;}catch(e){lastErr=e;}
+  }
   for(const src of SOURCES){
     try{
       say('AIを読み込み中…');
@@ -1637,6 +1661,7 @@ $('bInstall').onclick=async()=>{
 };
 async function checkOffline(){
   const el=$('offline');
+  if(EMBEDDED){const ok=embHas('gt-model-'+$('model').value);el.textContent=ok?'このAIはファイルに内蔵されています（ネット不要）':'このモデルはネット接続が必要です（内蔵は「標準」のみ）';$('bCache').hidden=true;return;}
   if(!('caches' in window)){el.textContent='この環境ではオフライン保存を使えません';return;}
   try{const k=$('model').value,ok=await caches.match(SOURCES[0].model(k))&&await caches.match(SOURCES[0].lib);
     el.textContent=ok?'このAIモデルはオフラインで使えます':'未保存：ネット接続中に「保存」を押してください';$('bCache').hidden=!!ok;}catch(e){el.textContent='';}
@@ -1648,12 +1673,37 @@ $('bCache').onclick=async()=>{
   catch(e){el.textContent='保存できませんでした。インターネット接続を確認してください';}
   $('bCache').disabled=false;setTimeout(checkOffline,800);
 };
-if('serviceWorker' in navigator){
+if(location.protocol==='file:'){$('bInstall').hidden=true;checkOffline();}
+else if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').then(()=>navigator.serviceWorker.ready).then(()=>setTimeout(checkOffline,1500)).catch(()=>{$('offline').textContent='オフライン機能を有効にできませんでした';});
 }else $('offline').textContent='この環境ではオフライン保存を使えません';
+if(EMBEDDED)[...$('model').options].forEach(o=>{if(embHas('gt-model-'+o.value))o.textContent+='・内蔵';});
+
+/* ---------- デモ ---------- */
+if(embHas('gt-demo'))$('bDemo').hidden=false;
+$('bDemo').onclick=async()=>{
+  if(running)return;
+  if((hasData()||PF.some(k=>P[k]))&&!confirm('いまの解析と対象者情報を閉じて、デモを開きますか？'))return;
+  $('bDemo').disabled=true;$('status').textContent='デモを準備中…';
+  try{
+    const d=JSON.parse(new TextDecoder().decode(await unpack('gt-demo')));
+    asReady=true;$('restoreBar').hidden=true;
+    loadProject({patient:d.patient||{}});
+    const mp4=document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"')!=='';
+    for(const id of SLOTS.map(x=>x.id)){const x=d.slots&&d.slots[id];if(!x)continue;const s=S[id];
+      const useMp4=mp4&&x.mp4||!x.webm,kp=x.kp;kp.video=kp.video.replace(/\.\w+$/,useMp4?'.mp4':'.webm');
+      const blob=new Blob([b64u8(useMp4?x.mp4:x.webm)],{type:useMp4?'video/mp4':'video/webm'});
+      Object.assign(s,{blob,url:URL.createObjectURL(blob),name:kp.video,isRec:false});
+      applyImport(s,kp,true);s.engine='デモ（合成データ）';s.cal=kp.calibration||null;s.cur=Math.round(kp.nframes*0.35);
+    }
+    vid.dataset.slot='';await selectSlot('left');renderSlots();renderReport();
+    $('status').textContent='デモを開きました。人形が歩く合成動画と、その関節位置のデータです（右脚は片麻痺を想定した歩き方）。自分の動画で試すときは「新しい検査を始める」を押してください。';
+  }catch(e){$('status').innerHTML='<span class="err">デモを開けませんでした（'+esc(e&&e.message||e)+'）</span>';}
+  finally{$('bDemo').disabled=false;}
+};
 
 renderCriteria();selectSlot('left');checkAutosave();
-if(location.protocol!=='file:')fetch('manual.html',{method:'HEAD',cache:'no-store'}).then(r=>{if(!r.ok)$('manualLink').hidden=true;}).catch(()=>{});
+if(location.protocol!=='file:'&&$('manualLink').getAttribute('href')==='manual.html')fetch('manual.html',{method:'HEAD',cache:'no-store'}).then(r=>{if(!r.ok)$('manualLink').hidden=true;}).catch(()=>{});
 window.__gait={S,compute,selectSlot,renderReport,stpOf,cycleCurves,projectData,loadProject,P:()=>P};
 </script>
 </body>

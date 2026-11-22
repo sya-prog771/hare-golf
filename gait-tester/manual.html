@@ -121,7 +121,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;min-height:32px
 <div class="wrap">
   <header>
     <h1>Gait Tester <small style="font-size:14px;color:var(--muted)">手動デジタイズ版</small></h1>
-    <div class="row" style="margin-top:6px"><a class="small" href="./" style="color:var(--accent)">← AI版に戻る</a></div>
+    <div class="row" style="margin-top:6px"><a class="small" id="aiLink" href="./" style="color:var(--accent)">← AI版に戻る</a><button class="small" id="bDemo" hidden>デモ動画で練習する</button></div>
     <p>動画を止めて、関節の位置を自分でタップして角度を計測します。AI版と同じ角度の定義・判定幅を使います。動画は端末の外に送信されません。</p>
   </header>
 
@@ -888,7 +888,33 @@ async function checkAutosave(){
 }
 window.addEventListener('beforeunload',e=>{if(mode&&mode.type==='dig'){e.preventDefault();e.returnValue='';}});
 let rzT=null;window.addEventListener('resize',()=>{clearTimeout(rzT);rzT=setTimeout(()=>{if(sl().vw&&sl().url)drawView();},150);});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(location.protocol!=='file:'&&'serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+/* ---------- デモ（オフライン版に埋め込んだ合成動画） ---------- */
+async function unpack(id){
+  const el=document.getElementById(id);if(!el)return null;
+  const b=atob(el.textContent.trim()),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);
+  if(el.dataset.gzip!=='1')return u.buffer;
+  return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+}
+const b64u8=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
+if(document.getElementById('gt-demo'))$('bDemo').hidden=false;
+$('bDemo').onclick=async()=>{
+  if((hasData()||PF.some(k=>P[k]))&&!confirm('いまの計測と対象者情報を閉じて、デモ動画を開きますか？'))return;
+  $('bDemo').disabled=true;
+  try{
+    const d=JSON.parse(new TextDecoder().decode(await unpack('gt-demo')));
+    asReady=true;$('restoreBar').hidden=true;loadProject({patient:d.patient||{}});
+    const mp4=document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"')!=='';
+    for(const id of['left','right']){const x=d.slots&&d.slots[id];if(!x)continue;const s=S[id],kp=x.kp;
+      const useMp4=mp4&&x.mp4||!x.webm,name=kp.video.replace(/\.\w+$/,useMp4?'.mp4':'.webm');
+      const blob=new Blob([b64u8(useMp4?x.mp4:x.webm)],{type:useMp4?'video/mp4':'video/webm'});
+      Object.assign(s,{blob,url:URL.createObjectURL(blob),name,fileFps:kp.fps,capFps:kp.capfps||kp.fps,cal:kp.calibration||null,recs:[],cur:Math.round(1.7*kp.fps),vw:0,vh:0});}
+    vid.dataset.slot='';await selectSlot('left');renderReport();
+    $('status').textContent='デモ動画を左側面・右側面に入れました（人形が歩く合成動画・60 fps・距離の基準 2 m 設定済み）。場面のボタンを押して関節をタップしてみてください。';
+  }catch(e){$('status').innerHTML='<span class="err">デモを開けませんでした（'+esc(e&&e.message||e)+'）</span>';}
+  finally{$('bDemo').disabled=false;}
+};
 
 selectSlot('left');checkAutosave();
 window.__manual={S,recVal,stpOf,meansOf,findingsOf,projectData,loadProject,selectSlot,renderReport};
