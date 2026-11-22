@@ -1,0 +1,1178 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gait Tester</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b7a63">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+/* 1カラムのモバイル優先ツール：撮影方向タブ → 動画 → 解析 → 結果 → 総合レポート */
+:root{
+  --bg:#f4f6f5;--surface:#ffffff;--fg:#17201d;--muted:#5d6b66;--line:#dbe2df;--soft:#eaf1ee;
+  --accent:#0b7a63;--accent-fg:#ffffff;--warn:#a15c00;--warn-bg:#fff3df;--bad:#b42318;
+  --c-trunk:#8b5cf6;--c-hip:#e0483d;--c-knee:#1f8fd6;--c-ankle:#1c9b4e;--c-R:#e0483d;--c-L:#1f8fd6;
+  --font:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{--bg:#111614;--surface:#1a211e;--fg:#e4ebe8;--muted:#98a6a0;--line:#2c3632;--soft:#20302a;--accent:#3cc9a5;--accent-fg:#06231b;--warn:#f0b452;--warn-bg:#352812;--bad:#f2786e;--c-trunk:#b39dff;--c-hip:#ff7b70;--c-knee:#5ab8f5;--c-ankle:#4fd17f;--c-R:#ff7b70;--c-L:#5ab8f5;color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.55;
+  padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:12px;padding-block:14px}
+header h1{font-size:20px;margin:0;letter-spacing:.02em}
+header p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h2{font-size:15px;margin:0;display:flex;align-items:center;gap:8px}
+.num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-fg);font-size:12px;font-weight:700;flex:none}
+button,.btn{font:inherit;font-size:15px;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;-webkit-tap-highlight-color:transparent;position:relative;overflow:hidden}
+button:focus-visible,.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+button.small{min-height:36px;padding:0 10px;font-size:14px}
+.vh{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted);min-width:0}
+select,input[type=number]{font:inherit;font-size:16px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:40px;padding:0 8px;width:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.slot{flex-direction:column;gap:0;padding:6px 4px;min-height:56px;line-height:1.3;font-size:14px;font-weight:600}
+.slot small{font-weight:400;font-size:11px;color:var(--muted)}
+.slot.on{border-color:var(--accent);background:var(--soft)}
+.slot .st{font-size:11px;font-weight:600}
+.st.done{color:var(--accent)}
+.viewer{position:relative;background:#000;border-radius:10px;overflow:hidden}
+.viewer canvas{display:block;width:100%;height:auto}
+.viewer .empty{color:#b9c4c0;text-align:center;padding:48px 16px;font-size:14px}
+.badge{position:absolute;left:8px;top:8px;right:8px;width:max-content;max-width:calc(100% - 16px);background:rgba(0,0,0,.66);color:#fff;font-size:12px;padding:3px 8px;border-radius:6px;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.muted{color:var(--muted);font-size:13px}
+.rbar{height:6px;border-radius:3px;background:var(--line);position:relative;margin:0 2px -4px}
+.rbar>div{position:absolute;top:0;bottom:0;background:var(--accent);border-radius:3px;left:0;width:100%}
+#range.flash{color:var(--accent);font-weight:600}
+.progress{height:10px;background:var(--soft);border-radius:6px;overflow:hidden}
+.progress>div{height:100%;width:0;background:var(--accent);transition:width .2s}
+.warn{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:13px}
+.err{color:var(--bad);font-size:14px}
+.tablewrap{overflow-x:auto;margin:0 -2px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12px}
+td small{color:var(--muted)}
+.jdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.cycle{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.cycle.off{opacity:.5}
+.cycle-head{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.cycle-head label{margin-left:auto;font-weight:400;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.cycle-head input{width:20px;height:20px;accent-color:var(--accent)}
+.evs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.evs.one{grid-template-columns:1fr}
+.ev{border:1px solid var(--line);border-radius:8px;padding:6px 7px;font-size:12px;background:var(--surface);color:var(--fg);text-align:left;min-height:0;display:block;font-variant-numeric:tabular-nums;line-height:1.45}
+.ev b{display:block;font-size:12.5px}
+.ev.sel{border-color:var(--accent);background:var(--soft)}
+.q{color:var(--warn)}
+.pat{border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+.pat small{color:var(--muted)}
+.pat .src{font-size:11px;color:var(--muted);font-weight:600}
+.adj{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.adj .lbl{font-size:13px;flex:1;min-width:120px}
+canvas.chart{width:100%;height:230px;display:block}
+.diff{color:var(--warn);font-weight:600}
+details summary{cursor:pointer;color:var(--muted);font-size:14px;min-height:32px;display:flex;align-items:center}
+.help{font-size:13.5px;line-height:1.7}
+.help ul{padding-left:18px;margin:6px 0}
+textarea{width:100%;height:120px;font:12px ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
+.cam{display:flex;flex-direction:column;gap:8px}
+.cam video{width:100%;max-height:60vh;border-radius:10px;background:#000;object-fit:contain}
+.rec{color:var(--bad);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Gait Tester</h1>
+    <div class="row" style="margin-top:6px"><button class="small primary" id="bInstall">アプリとしてインストール</button><a class="small" href="manual.html" style="color:var(--accent)">手動デジタイズ版を開く</a></div>
+    <div class="warn" id="installHelp" hidden></div>
+    <p>前後左右から撮影した最大4本の歩行動画を解析します。動画は端末の外に送信されません。</p>
+  </header>
+
+  <section class="card">
+    <h2><span class="num">1</span>撮影方向を選んで動画を入れる</h2>
+    <div class="slots" id="slots"></div>
+    <div class="muted" id="slotHint"></div>
+    <div class="row">
+      <label class="btn primary">動画を選択<input id="file" type="file" accept="video/*" class="vh"></label>
+      <label class="btn">カメラで撮影<input id="cap" type="file" accept="video/*" capture="environment" class="vh"></label>
+      <button id="bLive">画面内で録画</button>
+      <button id="bSaveRec" hidden>録画を保存</button>
+      <label class="btn">PC版AIの結果を読み込む<input id="kpIn" type="file" accept=".json,application/json" class="vh"></label>
+      <button id="bClear" hidden>この枠を空にする</button>
+    </div>
+    <span id="fname" class="muted"></span>
+    <div id="camPanel" class="cam" hidden>
+      <video id="live" playsinline muted autoplay></video>
+      <div class="row"><button class="primary" id="bRec">録画開始</button><button id="bCamClose">閉じる</button><span id="recInfo" class="muted grow"></span></div>
+    </div>
+    <div id="camMsg" class="warn" hidden></div>
+    <div class="viewer" id="viewerBox">
+      <div class="empty" id="empty">この枠にはまだ動画がありません</div>
+      <canvas id="view" hidden></canvas>
+      <div class="badge" id="badge" hidden></div>
+    </div>
+    <div class="rbar"><div id="rsel"></div></div>
+    <input id="scrub" type="range" min="0" max="0" value="0" disabled aria-label="フレーム位置">
+    <div class="row">
+      <button class="small" id="bPrev" disabled>◀ 1</button>
+      <button class="small" id="bNext" disabled>1 ▶</button>
+      <span class="grow"></span>
+      <button class="small" id="bStart" disabled>ここを開始</button>
+      <button class="small" id="bEnd" disabled>ここを終了</button>
+    </div>
+    <div class="row"><div class="muted grow" id="range">解析範囲：—</div><button class="small" id="bReset" disabled>範囲をリセット</button></div>
+    <div class="grid2">
+      <label class="f">撮影フレームレート
+        <select id="capFps"><option value="30">30 fps</option><option value="60">60 fps</option><option value="120">120 fps（スロー）</option><option value="240">240 fps（スロー）</option></select>
+      </label>
+      <label class="f">AIモデル（全動画共通）
+        <select id="model"><option value="lite">軽量（速い）</option><option value="full" selected>標準</option><option value="heavy">高精度（遅い）</option></select>
+      </label>
+    </div>
+    <details>
+      <summary>詳細設定（この枠）</summary>
+      <div class="grid2" style="margin-top:6px">
+        <label class="f">動画ファイルのfps<input id="fileFps" type="number" min="1" step="0.01" value="30"></label>
+        <label class="f" id="dirWrap">進行方向<select id="dir"><option value="auto">自動</option><option value="1">画面の左→右</option><option value="-1">画面の右→左</option></select></label>
+        <label class="f">平滑化（Hz・0で無し・全動画共通）<input id="fc" type="number" min="0" step="0.5" value="6"></label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label class="muted" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="optSwap" checked style="width:20px;height:20px;accent-color:var(--accent)">左右の脚の取り違えを補正（側面）</label>
+        <label class="muted" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="optOut" checked style="width:20px;height:20px;accent-color:var(--accent)">外れ値を除去</label>
+      </div>
+      <p class="muted">スロー動画は「撮影フレームレート」に実際の撮影fpsを選び、ファイルのfpsは通常30のままにします。解析は実時間で約60 Hzの間隔で行います。</p>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">2</span>AIで解析</h2>
+    <div class="row">
+      <button class="primary grow" id="bRun" disabled>この動画を解析</button>
+      <button class="grow" id="bRunAll" disabled>まとめて解析</button>
+    </div>
+    <div class="progress" hidden id="pbar"><div id="pfill"></div></div>
+    <div class="muted" id="status">動画は端末の外に送信されません。</div>
+    <div class="row"><button class="small" id="bCache">オフライン用にAIを保存</button><span class="muted grow" id="offline">確認中…</span></div>
+  </section>
+
+  <section class="card" id="resCard" hidden>
+    <h2><span class="num">3</span><span id="resTitle">結果</span></h2>
+    <div id="meta" class="muted"></div>
+    <div id="warns"></div>
+    <div class="tablewrap" id="summary"></div>
+    <div id="findings" style="display:flex;flex-direction:column;gap:8px"></div>
+    <h2 style="margin-top:6px" id="evTitle">周期ごとのイベント</h2>
+    <p class="muted" style="margin:0">イベントをタップすると上の動画にその瞬間を表示します。ずれている場合は±で修正し、不適切なものはチェックを外して除外できます。⚠は関節点の検出信頼度が低い場面です。</p>
+    <div class="adj" id="adjBar" hidden>
+      <span class="lbl" id="adjLbl"></span>
+      <button class="small" data-adj="-5">−5</button>
+      <button class="small" data-adj="-1">−1</button>
+      <button class="small" data-adj="1">＋1</button>
+      <button class="small" data-adj="5">＋5</button>
+    </div>
+    <div id="cycles" style="display:flex;flex-direction:column;gap:8px"></div>
+    <h2 style="margin-top:6px">角度の時系列</h2>
+    <p class="muted" style="margin:0" id="chartNote"></p>
+    <canvas id="chart" class="chart"></canvas>
+    <div class="row"><button id="xFrame">この動画のフレームデータCSV</button></div>
+  </section>
+
+  <section class="card" id="sumCard" hidden>
+    <h2><span class="num">4</span>総合レポート</h2>
+    <div id="report" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div class="row">
+      <button id="xAll">総合CSVを保存</button>
+      <button id="xCopy">総合結果をコピー</button>
+    </div>
+    <textarea id="copyArea" hidden readonly></textarea>
+  </section>
+
+  <details class="card" id="refCard">
+    <summary>参考数値（正常歩行）と判定基準・文献</summary>
+    <div class="help">
+      <p><b>矢状面の目安（健常成人）</b></p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>場面</th><th>股関節</th><th>膝関節</th><th>足関節</th></tr></thead>
+        <tbody>
+          <tr><td>初期接地</td><td>屈曲25°</td><td>0°</td><td>0°</td></tr>
+          <tr><td>立脚中期<br><small>（頭部最高点）</small></td><td>屈曲→伸展へ<br><small>0°前後</small></td><td>軽度屈曲</td><td>背屈5〜10°</td></tr>
+          <tr><td>足尖離地</td><td>0°前後</td><td>屈曲40°</td><td>底屈20°</td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted">Perry・ランチョ・ロス・アミーゴ方式の目安。個人差・歩行速度による差があります。前額面（骨盤の傾き・体幹側屈・膝の外反内反）は文献により値の幅が大きいため、目安値ではなく判定基準のみ示しています。</p>
+      <p><b>比較するときの注意</b></p>
+      <ul>
+        <li>文献の股関節角度は骨盤基準です。本アプリは体幹（肩–大転子）基準のため、そのまま比較はできません</li>
+        <li>足関節は「踵–つま先」の線で計算しているため、3次元動作解析の値とずれます</li>
+        <li>前額面の膝角度は、2D動画に投影した見かけの角度（FPPA）です。下肢の回旋や撮影方向のずれの影響を受けます</li>
+        <li>研究では、自施設で健常者を同じ方法で撮影した値を対照にするのが確実です</li>
+      </ul>
+      <div id="criteria"></div>
+      <p><b>文献</b></p>
+      <ul>
+        <li>Perry J, Burnfield JM. <i>Gait Analysis: Normal and Pathological Function</i>. 2nd ed. SLACK; 2010.（邦訳『ペリー 歩行分析』医歯薬出版）</li>
+        <li>Götz-Neumann K.『観察による歩行分析』医学書院</li>
+        <li>Kadaba MP, Ramakrishnan HK, Wootten ME. Measurement of lower extremity kinematics during level walking. <i>J Orthop Res</i>. 1990;8(3):383–392.</li>
+        <li>Hii CST, et al. Automated Gait Analysis Based on a Marker-Free Pose Estimation Model. <i>Sensors</i>. 2023;23(14):6489.（MediaPipeによる接地・離地の検出精度）</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary>角度の定義と撮影のコツ</summary>
+    <div class="help">
+      <p><b>側面（左側面・右側面）</b>：カメラ側の脚を解析</p>
+      <ul>
+        <li><b>初期接地</b>：踵が骨盤に対して最も前方に出た瞬間（Zeni法）</li>
+        <li><b>頭部最高点</b>：立脚期（初期接地〜足尖離地）で耳の位置が最も高くなった瞬間</li>
+        <li><b>足尖離地</b>：つま先が骨盤に対して最も後方に位置した瞬間（Zeni法）</li>
+        <li>体幹：股関節→肩の線と鉛直線のなす角／股関節：体幹線の延長と大腿のなす角／膝関節：大腿と下腿のなす角／足関節：下腿に垂直な線と踵→つま先の線のなす角</li>
+      </ul>
+      <p><b>前方・後方</b>：左右両脚を解析</p>
+      <ul>
+        <li><b>立脚中期</b>：反対側の足首が最も高く上がった瞬間（例：左足首が最も高い＝右の立脚中期）</li>
+        <li><b>骨盤の傾き</b>：左右の股関節を結ぶ線と水平線のなす角。遊脚側が下がると＋（遊脚側下制）</li>
+        <li><b>体幹側屈</b>：股関節中点→肩中点の線と鉛直線のなす角。立脚側へ傾くと＋</li>
+        <li><b>立脚側の膝</b>：股関節–膝–足首の見かけの角度（FPPA）。膝が内側へ入ると＋（外反）、外側へ出ると−（内反）</li>
+      </ul>
+      <ul>
+        <li>カメラは固定し、腰の高さで、全身が常に画面に入るように撮影</li>
+        <li>側面は歩行路に垂直に3 m以上離して。前方・後方は歩行路の正面から、まっすぐ向かってくる／離れていく歩行を撮影</li>
+        <li>背景と服のコントラストをつけ、明るい場所で。広角（0.5倍）レンズは避ける</li>
+        <li>杖・歩行器・介助者が脚に重なると精度が下がります</li>
+      </ul>
+      <p class="muted">AIによる2D推定値です。3次元動作解析装置や手動デジタイズとは値が一致しないことがあります。研究で用いる場合は信頼性・妥当性の検証を行ってください。</p>
+    </div>
+  </details>
+</div>
+
+<video id="vid" playsinline muted preload="auto" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0"></video>
+
+<script type="module">
+const VER='0.10.14';
+const SOURCES=[
+  {lib:`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VER}/vision_bundle.mjs`,wasm:`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VER}/wasm`,
+   model:k=>`https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${k}/float16/1/pose_landmarker_${k}.task`},
+  {lib:'./mediapipe/vision_bundle.mjs',wasm:'./mediapipe/wasm',model:k=>`./mediapipe/pose_landmarker_${k}.task`}
+];
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const deg=r=>r*180/Math.PI,wrap=a=>{while(a>180)a-=360;while(a<=-180)a+=360;return a;};
+const fmt=(v,d=1)=>v==null||!isFinite(v)?'—':v.toFixed(d);
+const SN={R:'右',L:'左'};
+
+/* ---------- 定義 ---------- */
+const SLOTS=[
+  {id:'left',n:'左側面',sub:'左脚を解析',kind:'sag',side:'L',hint:'人の左側から撮影（左脚がカメラ側）'},
+  {id:'right',n:'右側面',sub:'右脚を解析',kind:'sag',side:'R',hint:'人の右側から撮影（右脚がカメラ側）'},
+  {id:'front',n:'前方',sub:'正面',kind:'fro',view:'front',hint:'正面から、こちらへ歩いてくるところを撮影'},
+  {id:'back',n:'後方',sub:'背面',kind:'fro',view:'back',hint:'背面から、向こうへ歩いていくところを撮影'}
+];
+const IDX={R:{sh:12,hip:24,knee:26,ank:28,heel:30,toe:32,ear:8},L:{sh:11,hip:23,knee:25,ank:27,heel:29,toe:31,ear:7}};
+const PTS=['sh','hip','knee','ank','heel','toe','ear'];
+const JOINTS=[{k:'trunk',n:'体幹',s:'体幹',c:'--c-trunk',pos:'前傾',neg:'後傾'},{k:'hip',n:'股関節',s:'股',c:'--c-hip',pos:'屈曲',neg:'伸展'},{k:'knee',n:'膝関節',s:'膝',c:'--c-knee',pos:'屈曲',neg:'伸展'},{k:'ankle',n:'足関節',s:'足',c:'--c-ankle',pos:'背屈',neg:'底屈'}];
+const FJ=[{k:'pelvis',n:'骨盤の傾き',s:'骨盤',c:'--c-hip',pos:'遊脚側下制',neg:'遊脚側挙上'},{k:'tlat',n:'体幹側屈',s:'体幹',c:'--c-trunk',pos:'立脚側へ',neg:'遊脚側へ'},{k:'fknee',n:'立脚側の膝',s:'膝',c:'--c-knee',pos:'外反',neg:'内反'}];
+const JK=Object.fromEntries([...JOINTS,...FJ].map(j=>[j.k,j]));
+function clin(k,v,d=1){if(v==null||!isFinite(v))return'—';const j=JK[k],a=Math.abs(v);if(a<0.05)return'0°';return(v>0?j.pos:j.neg)+a.toFixed(d)+'°';}
+const EVN={ic:'初期接地',peak:'頭部最高点',to:'足尖離地',mR:'右立脚中期',mL:'左立脚中期'};
+const REF={ic:{trunk:null,hip:'屈曲25°',knee:'0°',ankle:'0°'},peak:{trunk:null,hip:'0°前後',knee:'軽度屈曲',ankle:'背屈5〜10°'},to:{trunk:null,hip:'0°前後',knee:'屈曲40°',ankle:'底屈20°'}};
+// 判定幅：Perry & Burnfield 2010 の値に2D・AI計測の誤差を見込んだアプリ独自の範囲（度、符号つき）
+const RANGE={
+  ic:{trunk:[-5,10],hip:[15,35],knee:[-5,10],ankle:[-5,10]},
+  peak:{trunk:[-5,10],hip:[-10,15],knee:[-5,20],ankle:[0,15]},
+  to:{trunk:[-5,10],hip:[-20,10],knee:[25,55],ankle:[-30,-5]},
+  mid:{pelvis:[-5,7],tlat:[-5,7],fknee:[-10,10]}
+};
+const PATTERNS=[
+  {n:'前足部接地（踵接地の欠如）',e:'ic',k:'ankle',op:'<',v:-10,d:'初期接地で足関節が底屈10°を超える'},
+  {n:'初期接地時の膝屈曲増大',e:'ic',k:'knee',op:'>',v:15,d:'初期接地で膝屈曲が15°を超える'},
+  {n:'立脚期の膝過伸展（ロッキング）',e:'peak',k:'knee',op:'<',v:-5,d:'立脚中期で膝が伸展5°を超える'},
+  {n:'立脚期の過度な膝屈曲（屈み歩行傾向）',e:'peak',k:'knee',op:'>',v:20,d:'立脚中期で膝屈曲が20°を超える'},
+  {n:'立脚中期の背屈不足（下腿前傾の不足）',e:'peak',k:'ankle',op:'<',v:0,d:'立脚中期で足関節が背屈に達しない'},
+  {n:'立脚中期の過度な背屈',e:'peak',k:'ankle',op:'>',v:20,d:'立脚中期で背屈が20°を超える'},
+  {n:'立脚後期の股関節伸展不足',e:'to',k:'hip',op:'>',v:10,d:'足尖離地で股関節屈曲が10°を超える（体幹基準）'},
+  {n:'離地時の膝屈曲不足（スティッフニー傾向）',e:'to',k:'knee',op:'<',v:25,d:'足尖離地で膝屈曲が25°未満'},
+  {n:'蹴り出し不足（離地時の底屈不足）',e:'to',k:'ankle',op:'>',v:-5,d:'足尖離地で底屈が5°未満'},
+  {n:'体幹前傾',e:'peak',k:'trunk',op:'>',v:10,d:'立脚中期で体幹前傾が10°を超える'},
+  {n:'体幹後傾',e:'peak',k:'trunk',op:'<',v:-5,d:'立脚中期で体幹後傾が5°を超える'}
+];
+const FPATTERNS=[
+  {n:'トレンデレンブルグ徴候（遊脚側の骨盤下制）',k:'pelvis',op:'>',v:7,d:'立脚中期に遊脚側の骨盤が7°を超えて下がる（立脚側の股関節外転筋の機能低下を示唆）'},
+  {n:'遊脚側骨盤の挙上（ヒップハイキング）',k:'pelvis',op:'<',v:-5,d:'立脚中期に遊脚側の骨盤が5°を超えて上がる'},
+  {n:'デュシェンヌ徴候（立脚側への体幹側屈）',k:'tlat',op:'>',v:7,d:'立脚中期に体幹が立脚側へ7°を超えて傾く'},
+  {n:'立脚期の膝外反（ニーイン）',k:'fknee',op:'>',v:10,d:'立脚中期に膝が内側へ入り、見かけの外反が10°を超える'},
+  {n:'立脚期の膝内反（ラテラルスラストの疑い）',k:'fknee',op:'<',v:-10,d:'立脚中期に膝が外側へ出て、見かけの内反が10°を超える'}
+];
+const LR_DIFF=10;
+const rangeTxt=(k,r)=>`${clin(k,r[0],0)}〜${clin(k,r[1],0)}`;
+
+/* ---------- 状態 ---------- */
+const S={};SLOTS.forEach(d=>S[d.id]={...d,blob:null,url:null,name:'',vw:0,vh:0,nFrames:0,fileFps:30,capFps:30,dir:'auto',rangeS:0,rangeE:0,samples:null,A:null,selEv:null,cur:0,isRec:false});
+let act='left',running=false,cancel=false,landmarker=null,lmKind=null,tsMs=0;
+const sl=()=>S[act];
+const vid=$('vid'),view=$('view'),vctx=view.getContext('2d');
+const work=document.createElement('canvas'),wctx=work.getContext('2d');
+const tReal=(s,f)=>f/s.capFps;
+const stepFrames=s=>Math.max(1,Math.round(s.capFps/60));
+
+/* ---------- 枠 ---------- */
+function renderSlots(){
+  $('slots').innerHTML=SLOTS.map(d=>{const s=S[d.id];const st=s.A?'<span class="st done">解析済み</span>':s.url?'<span class="st">動画あり</span>':'<span class="st" style="color:var(--muted)">未選択</span>';
+    return`<button class="slot${d.id===act?' on':''}" data-slot="${d.id}">${d.n}<small>${d.sub}</small>${st}</button>`;}).join('');
+  $('slots').querySelectorAll('[data-slot]').forEach(b=>b.onclick=()=>{if(!running)selectSlot(b.dataset.slot);});
+  const any=SLOTS.some(d=>S[d.id].url&&!S[d.id].A);
+  $('bRunAll').disabled=running||!any;
+}
+async function selectSlot(id){
+  act=id;const s=sl();renderSlots();
+  $('slotHint').textContent=s.hint;
+  $('capFps').value=String([30,60,120,240].reduce((a,b)=>Math.abs(b-s.capFps)<Math.abs(a-s.capFps)?b:a));
+  $('fileFps').value=s.fileFps;$('dir').value=s.dir;$('dirWrap').hidden=s.kind!=='sag';
+  $('fname').textContent=s.name+(s.imported?`　［PC版AI：${s.imported.video}］`:'');$('bClear').hidden=!(s.url||s.imported);$('bSaveRec').hidden=!(s.url&&s.isRec);
+  if(s.url){await attach(id);if(act!==id)return;showVideoUI(true);updRange();show(s.cur);}
+  else{showVideoUI(false);updRange();}
+  renderSlotResults();
+}
+function showVideoUI(on){
+  $('empty').hidden=on;view.hidden=!on;$('badge').hidden=!on;
+  ['scrub','bPrev','bNext','bStart','bEnd','bReset'].forEach(id=>$(id).disabled=!on||running);
+  $('bRun').disabled=!on||running;
+}
+function attach(id){
+  return new Promise(res=>{
+    const s=S[id];if(!s.url){res(false);return;}
+    if(vid.dataset.slot===id&&vid.readyState>=1&&s.vw){setView(s);res(true);return;}
+    const on=async()=>{
+      vid.removeEventListener('loadedmetadata',on);await fixDuration();
+      s.vw=vid.videoWidth;s.vh=vid.videoHeight;
+      const n=Math.max(1,Math.floor(vid.duration*s.fileFps+1e-6));
+      if(s.nFrames!==n){s.nFrames=n;if(!s.rangeE||s.rangeE>n-1){s.rangeS=0;s.rangeE=n-1;}}
+      setView(s);res(true);
+    };
+    vid.dataset.slot=id;vid.addEventListener('loadedmetadata',on);vid.src=s.url;vid.load();
+  });
+}
+function setView(s){const W=Math.min(s.vw,960);if(view.width!==W||view.height!==Math.round(s.vh*W/s.vw)){view.width=W;view.height=Math.round(s.vh*W/s.vw);}$('scrub').max=s.nFrames-1;}
+async function fixDuration(){
+  if(isFinite(vid.duration))return;
+  await new Promise(r=>{const h=()=>{if(isFinite(vid.duration)){vid.removeEventListener('durationchange',h);r();}};
+    vid.addEventListener('durationchange',h);vid.currentTime=1e7;setTimeout(r,4000);});
+  vid.currentTime=0;
+}
+function loadInto(id,blob,name,isRec){
+  const s=S[id];if(s.url)URL.revokeObjectURL(s.url);
+  Object.assign(s,{blob,url:URL.createObjectURL(blob),name,isRec:!!isRec,vw:0,vh:0,nFrames:0,rangeS:0,rangeE:0,samples:null,A:null,selEv:null,cur:0});
+  if(vid.dataset.slot===id)vid.dataset.slot='';
+  // 同じ動画のPC版AIデータを先に読み込んでいた場合は、そのまま使う
+  if(s.imported&&s.imported.video===name)applyImport(s,s.imported,true);
+  else s.imported=null;
+  selectSlot(id);renderReport();
+}
+function applyImport(s,j,quiet){
+  s.imported=j;s.engine='RTMPose（PC版AI）';
+  s.fileFps=j.fps;s.capFps=j.capfps||s.capFps||j.fps;if(!j.capfps&&s.capFps<j.fps)s.capFps=j.fps;
+  s.vw=j.width;s.vh=j.height;s.nFrames=j.nframes;s.rangeS=0;s.rangeE=j.nframes-1;s.selEv=null;
+  const fr=j.frames.map(o=>({f:o.f,lm:o.lm}));
+  s.samples={step:j.stride||1,all:fr,list:fr,from:fr.length?fr[0].f:0,to:fr.length?fr[fr.length-1].f:0};
+  if(!s.url)s.name=j.video;
+  compute(s,quiet);
+}
+$('kpIn').addEventListener('change',e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    let j;try{j=JSON.parse(r.result);}catch(err){$('status').innerHTML='<span class="err">ファイルを読み込めませんでした（JSONの形式ではありません）。</span>';return;}
+    if(!j||j.format!=='gaittester-keypoints-v1'||!Array.isArray(j.frames)){$('status').innerHTML='<span class="err">Gait Tester用のPC版AIデータではありません。gt_rtmpose.py で作成した「〜_rtmpose.json」を選んでください。</span>';return;}
+    const s=sl();
+    applyImport(s,j,false);
+    if(s.url&&s.name!==j.video)$('status').textContent=`注意：この枠の動画（${s.name}）とデータの動画名（${j.video}）が違います。骨格の表示がずれる場合は動画を確認してください。`;
+    else $('status').textContent=`${s.n}：PC版AI（RTMPose）のデータを読み込みました（${j.frames.length}コマ、${j.frames.filter(o=>o.lm).length}コマで人物を検出）。${s.url?'':'骨格を動画に重ねて確認するには、同じ動画をこの枠に入れてください。'}`;
+    selectSlot(act);
+  };
+  r.readAsText(f);
+});
+['file','cap'].forEach(id=>$(id).addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  loadInto(act,f,f.name||`撮影_${stamp()}.mp4`,id==='cap');e.target.value='';
+}));
+$('bClear').onclick=()=>{const s=sl();if(s.url)URL.revokeObjectURL(s.url);Object.assign(s,{blob:null,url:null,name:'',A:null,samples:null,vw:0,nFrames:0,imported:null,engine:null});vid.dataset.slot='';selectSlot(act);renderReport();};
+const stamp=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;};
+
+/* ---------- カメラ ---------- */
+function camMsg(t){$('camMsg').textContent=t;$('camMsg').hidden=!t;}
+let stream=null,rec=null,chunks=[],recT0=0,recTimer=null;
+$('bLive').onclick=async()=>{
+  camMsg('');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camMsg('このブラウザではページ内でカメラを使えません。「カメラで撮影」を使ってください。');return;}
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}}});}
+  catch(e){camMsg(e&&e.name==='NotAllowedError'?'カメラの使用が許可されませんでした。ブラウザの設定でカメラを許可してください。':'カメラを起動できませんでした（'+(e&&e.name||e)+'）。「カメラで撮影」を使ってください。');return;}
+  $('live').srcObject=stream;$('camPanel').hidden=false;
+  const s=stream.getVideoTracks()[0].getSettings();
+  $('recInfo').textContent=`${sl().n}に録画　${s.width||'?'}×${s.height||'?'}　${s.frameRate?Math.round(s.frameRate)+' fps':''}`;
+};
+function closeCam(){if(recTimer)clearInterval(recTimer);recTimer=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('live').srcObject=null;$('camPanel').hidden=true;$('bRec').textContent='録画開始';}
+$('bCamClose').onclick=()=>{if(rec&&rec.state==='recording'){rec.onstop=null;rec.stop();}closeCam();};
+$('bRec').onclick=()=>{
+  if(rec&&rec.state==='recording'){rec.stop();return;}
+  if(!window.MediaRecorder){camMsg('このブラウザは録画に対応していません。「カメラで撮影」を使ってください。');return;}
+  const mt=['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  chunks=[];
+  try{rec=new MediaRecorder(stream,mt?{mimeType:mt,videoBitsPerSecond:12e6}:undefined);}catch(e){rec=new MediaRecorder(stream);}
+  rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
+  const target=act;
+  rec.onstop=()=>{
+    const type=rec.mimeType||mt||'video/webm',ext=type.includes('mp4')?'mp4':'webm';
+    const fps=Math.round(stream?stream.getVideoTracks()[0].getSettings().frameRate||30:30);
+    const blob=new Blob(chunks,{type});closeCam();
+    S[target].fileFps=fps;S[target].capFps=fps;
+    loadInto(target,blob,`${S[target].n}_${stamp()}.${ext}`,true);
+  };
+  rec.start(500);recT0=performance.now();$('bRec').textContent='録画停止';
+  recTimer=setInterval(()=>{$('recInfo').innerHTML=`<span class="rec">● 録画中 ${((performance.now()-recT0)/1000).toFixed(0)} 秒</span>`;},250);
+};
+$('bSaveRec').onclick=()=>{const s=sl();if(s.blob)download(s.name,s.blob);};
+
+/* ---------- 再生・範囲 ---------- */
+function seekFrame(s,f){
+  return new Promise(res=>{
+    const t=(f+0.5)/s.fileFps;
+    if(Math.abs(vid.currentTime-t)<1e-4&&vid.readyState>=2){res();return;}
+    let done=false;
+    const fin=()=>{if(done)return;done=true;vid.removeEventListener('seeked',on);clearTimeout(to);res();};
+    const on=()=>{if('requestVideoFrameCallback' in vid){let ok=false;vid.requestVideoFrameCallback(()=>{ok=true;fin();});setTimeout(()=>{if(!ok)fin();},150);}else fin();};
+    const to=setTimeout(fin,5000);
+    vid.addEventListener('seeked',on);vid.currentTime=t;
+  });
+}
+let busy=false,pend=null;
+async function show(f){
+  const s=sl();if(!s.vw||!s.url||running)return;
+  pend=Math.max(0,Math.min(s.nFrames-1,Math.round(f)));
+  if(busy)return;busy=true;
+  while(pend!==null){const g=pend;pend=null;s.cur=g;$('scrub').value=g;await seekFrame(s,g);if(sl()===s)drawView(s,g);}
+  busy=false;
+}
+$('scrub').addEventListener('input',e=>show(+e.target.value));
+$('bPrev').onclick=()=>show(sl().cur-1);$('bNext').onclick=()=>show(sl().cur+1);
+function updRange(){
+  const s=sl();
+  if(!s.vw){$('range').textContent='解析範囲：—';$('rsel').style.width='0';return;}
+  const n=Math.floor((s.rangeE-s.rangeS)/stepFrames(s))+1;
+  $('range').textContent=`解析範囲：${tReal(s,s.rangeS).toFixed(2)}〜${tReal(s,s.rangeE).toFixed(2)} 秒（実時間）／約${n}コマ`;
+  const N=Math.max(1,s.nFrames-1);$('rsel').style.left=(s.rangeS/N*100)+'%';$('rsel').style.width=((s.rangeE-s.rangeS)/N*100)+'%';
+}
+function rangeChanged(what){
+  const s=sl();updRange();const el=$('range');el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1200);
+  if(!s.samples)return;
+  if(s.rangeS>=s.samples.from&&s.rangeE<=s.samples.to){
+    s.samples.list=s.samples.all.filter(o=>o.f>=s.rangeS&&o.f<=s.rangeE);s.selEv=null;
+    if(s.samples.list.length<10){$('status').textContent='範囲が短すぎます。もう少し広げてください。';return;}
+    compute(s);$('status').textContent=`${what}：解析済みのデータから結果を計算し直しました`;
+  }else $('status').textContent='解析した範囲の外を含むため、結果に反映するには「この動画を解析」をもう一度押してください';
+}
+$('bStart').onclick=()=>{const s=sl();s.rangeS=s.cur;if(s.rangeE<=s.rangeS)s.rangeE=s.nFrames-1;rangeChanged('開始位置を変更');};
+$('bEnd').onclick=()=>{const s=sl();s.rangeE=s.cur;if(s.rangeS>=s.rangeE)s.rangeS=0;rangeChanged('終了位置を変更');};
+$('bReset').onclick=()=>{const s=sl();s.rangeS=s.samples?s.samples.from:0;s.rangeE=s.samples?s.samples.to:s.nFrames-1;rangeChanged('範囲をリセット');};
+$('capFps').addEventListener('change',()=>{const s=sl();s.capFps=+$('capFps').value;updRange();if(s.samples)compute(s);});
+$('fileFps').addEventListener('change',()=>{const s=sl();const v=+$('fileFps').value;if(!(v>0))return;s.fileFps=v;if(s.vw){s.nFrames=Math.max(1,Math.floor(vid.duration*v+1e-6));s.rangeS=0;s.rangeE=s.nFrames-1;s.samples=null;s.A=null;setView(s);updRange();renderSlotResults();renderSlots();renderReport();}});
+$('dir').addEventListener('change',()=>{const s=sl();s.dir=$('dir').value;if(s.samples)compute(s);});
+const recomputeAll=()=>{SLOTS.forEach(d=>{if(S[d.id].samples)compute(S[d.id],true);});renderSlots();renderSlotResults();renderReport();show(sl().cur);};
+['fc','optSwap','optOut'].forEach(id=>$(id).addEventListener('change',recomputeAll));
+
+/* ---------- 表示 ---------- */
+function drawView(s,f){
+  vctx.drawImage(vid,0,0,view.width,view.height);
+  let label=`${s.n}　${tReal(s,f).toFixed(3)} 秒`;
+  const A=s.A;
+  if(A){
+    const i=A.byFrame.get(f);
+    if(i!=null){
+      drawSkeleton(s,i);
+      if(A.type==='sag'){const a=A.ang[i];label+='　'+JOINTS.map(j=>j.s+' '+clin(j.k,a[j.k])).join('　');}
+    }
+    if(s.selEv){const c=A.cycles[s.selEv.c];if(c&&A.samples[c[s.selEv.e]]&&A.samples[c[s.selEv.e]].f===f){
+      const ek=A.type==='sag'?s.selEv.e:c.key;label=`${EVN[ek]}　`+label;
+      if(A.type==='fro'){const v=froVal(A,c);label+='　'+FJ.map(j=>j.s+' '+clin(j.k,v[j.k])).join('　');}
+    }}
+  }
+  $('badge').textContent=label;
+}
+function drawSkeleton(s,i){
+  const A=s.A,o=A.samples[i];if(!o.lm)return;
+  const k=view.width/s.vw,lw=Math.max(2,view.width/320);
+  vctx.lineWidth=lw;vctx.lineCap='round';
+  const chain=(side,color)=>{
+    const ix=IDX[side],P=n=>{const p=o.lm[ix[n]];return p?[p[0]*k,p[1]*k,p[2]]:null;};
+    const segs=A.type==='sag'?[['ear','sh'],['sh','hip'],['hip','knee'],['knee','ank'],['ank','heel'],['heel','toe'],['ank','toe']]:[['sh','hip'],['hip','knee'],['knee','ank']];
+    vctx.strokeStyle=color;
+    segs.forEach(([a,b])=>{const p=P(a),q=P(b);if(p&&q){vctx.beginPath();vctx.moveTo(p[0],p[1]);vctx.lineTo(q[0],q[1]);vctx.stroke();}});
+    (A.type==='sag'?PTS:['sh','hip','knee','ank']).forEach(n=>{const p=P(n);if(!p)return;vctx.beginPath();vctx.arc(p[0],p[1],lw*2.2,0,Math.PI*2);vctx.fillStyle=p[2]<0.5?'#ffb020':'#2ee6b0';vctx.fill();});
+  };
+  if(A.type==='sag')chain(A.side,'rgba(255,255,255,.9)');
+  else{
+    const L=o.lm,line=(a,b,c)=>{vctx.strokeStyle=c;vctx.beginPath();vctx.moveTo(L[a][0]*k,L[a][1]*k);vctx.lineTo(L[b][0]*k,L[b][1]*k);vctx.stroke();};
+    line(11,12,'rgba(255,255,255,.9)');line(23,24,'#ffd23f');
+    chain('R','rgba(255,120,110,.95)');chain('L','rgba(110,180,255,.95)');
+  }
+}
+
+/* ---------- AI ---------- */
+async function getLandmarker(kind,say){
+  if(landmarker&&lmKind===kind)return landmarker;
+  if(landmarker){try{landmarker.close();}catch(e){}landmarker=null;}
+  let lastErr;
+  for(const src of SOURCES){
+    try{
+      say('AIを読み込み中…');
+      const mp=await import(src.lib);
+      const fs=await mp.FilesetResolver.forVisionTasks(src.wasm);
+      const opt=d=>({baseOptions:{modelAssetPath:src.model(kind),delegate:d},runningMode:'VIDEO',numPoses:1,minPoseDetectionConfidence:0.5,minPosePresenceConfidence:0.5,minTrackingConfidence:0.5});
+      try{landmarker=await mp.PoseLandmarker.createFromOptions(fs,opt('GPU'));}
+      catch(e){landmarker=await mp.PoseLandmarker.createFromOptions(fs,opt('CPU'));}
+      lmKind=kind;return landmarker;
+    }catch(e){lastErr=e;}
+  }
+  throw lastErr||new Error('読み込み失敗');
+}
+function setRunning(on){
+  running=on;
+  $('bRun').textContent=on?'中止':'この動画を解析';$('bRun').disabled=on?false:!sl().url;
+  $('bRunAll').hidden=on;$('pbar').hidden=!on&&$('pbar').hidden;
+  ['scrub','bPrev','bNext','bStart','bEnd','bReset','file','cap','bLive','bClear'].forEach(id=>$(id).disabled=on||(['scrub','bPrev','bNext','bStart','bEnd','bReset'].includes(id)&&!sl().url));
+  renderSlots();
+}
+async function analyzeSlot(id,prefix){
+  const s=S[id],say=t=>$('status').textContent=prefix+t;
+  if(act!==id){act=id;await selectSlot(id);}
+  await attach(id);
+  const lm=await getLandmarker($('model').value,say);
+  // 動画が変わるたびに追跡をリセットするため、時刻を大きく進める
+  tsMs+=10000;
+  const st=stepFrames(s),frames=[];for(let f=s.rangeS;f<=s.rangeE;f+=st)frames.push(f);
+  const W=Math.min(s.vw,720);work.width=W;work.height=Math.round(s.vh*W/s.vw);
+  const out=[],t0=performance.now();
+  $('pbar').hidden=false;
+  for(let j=0;j<frames.length;j++){
+    if(cancel)return false;
+    const f=frames[j];await seekFrame(s,f);
+    wctx.drawImage(vid,0,0,work.width,work.height);
+    tsMs+=1000/60;
+    const r=lm.detectForVideo(work,Math.round(tsMs));
+    const p=r&&r.landmarks&&r.landmarks[0];
+    out.push({f,lm:p?p.map(q=>[q.x*s.vw,q.y*s.vh,q.visibility??1]):null});
+    if(j%3===0){
+      vctx.drawImage(work,0,0,view.width,view.height);
+      const pct=(j+1)/frames.length,el=(performance.now()-t0)/1000,rem=el/pct-el;
+      $('pfill').style.width=(pct*100).toFixed(1)+'%';
+      say(`解析中 ${j+1}/${frames.length}　残り約${Math.ceil(rem)}秒`);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  s.samples={step:st,all:out,list:out,from:s.rangeS,to:s.rangeE};s.selEv=null;s.engine='MediaPipe（端末内）';
+  compute(s);
+  say(`${s.n}：${out.length}コマ中 ${out.filter(o=>o.lm).length}コマで人物を検出`);
+  return true;
+}
+$('bRun').onclick=async()=>{
+  if(running){cancel=true;return;}
+  cancel=false;setRunning(true);
+  try{const ok=await analyzeSlot(act,'');if(!ok)$('status').textContent='中止しました';}
+  catch(e){aiError(e);}
+  finally{setRunning(false);$('pfill').style.width='100%';show(sl().cur);}
+};
+$('bRunAll').onclick=async()=>{
+  const ids=SLOTS.filter(d=>S[d.id].url&&!S[d.id].A).map(d=>d.id);if(!ids.length)return;
+  cancel=false;setRunning(true);
+  try{for(let k=0;k<ids.length;k++){const ok=await analyzeSlot(ids[k],`[${k+1}/${ids.length} ${S[ids[k]].n}] `);if(!ok){$('status').textContent='中止しました';break;}}
+    if(!cancel)$('status').textContent=`${ids.length}本の解析が完了しました。総合レポートを確認してください。`;}
+  catch(e){aiError(e);}
+  finally{setRunning(false);$('pfill').style.width='100%';show(sl().cur);}
+};
+function aiError(e){$('status').innerHTML=`<span class="err">AIを読み込めませんでした。インターネット接続を確認するか、ネット接続中に「オフライン用にAIを保存」を押してください。（${(e&&e.message||e).toString().slice(0,120)}）</span>`;}
+
+/* ---------- 信号処理 ---------- */
+function bw(fc,fs){const K=Math.tan(Math.PI*fc/fs),q=Math.SQRT2,n=1/(1+q*K+K*K),b0=K*K*n;return{b:[b0,2*b0,b0],a:[2*(K*K-1)*n,(1-q*K+K*K)*n]};}
+function lfilt(x,c){const y=new Array(x.length);let x1=x[0],x2=x[0],y1=x[0],y2=x[0];
+  for(let i=0;i<x.length;i++){const v=c.b[0]*x[i]+c.b[1]*x1+c.b[2]*x2-c.a[0]*y1-c.a[1]*y2;x2=x1;x1=x[i];y2=y1;y1=v;y[i]=v;}return y;}
+function filtfilt(x,fc,fs){const c=bw(fc,fs),n=Math.min(x.length-1,15),pre=[],post=[],L=x.length;
+  for(let i=n;i>=1;i--)pre.push(2*x[0]-x[i]);for(let i=1;i<=n;i++)post.push(2*x[L-1]-x[L-1-i]);
+  let y=lfilt(pre.concat(x,post),c);y.reverse();y=lfilt(y,c);y.reverse();return y.slice(n,n+L);}
+function fillGaps(a,maxGap){const y=a.slice();let i=0;
+  while(i<y.length){if(y[i]!=null){i++;continue;}let j=i;while(j<y.length&&y[j]==null)j++;
+    if(i>0&&j<y.length&&j-i<=maxGap){for(let k=i;k<j;k++)y[k]=y[i-1]+(y[j]-y[i-1])*(k-i+1)/(j-i+1);}i=j;}
+  return y;}
+// ---- 精度改善：左右の脚の取り違え補正（2次の連続性によるビタビ法） ----
+const LEGL=[23,25,27,29,31],LEGR=[24,26,28,30,32];
+function fixSwaps(list){
+  const V=[];list.forEach((o,i)=>{if(o.lm)V.push(i);});
+  const out=list.map(o=>({f:o.f,lm:o.lm,swapped:false}));
+  if(V.length<4)return{list:out,count:0};
+  // 脚の長さ（大転子–外果の中央値）で距離を正規化
+  const ll=[];V.forEach(i=>{const L=list[i].lm;ll.push(Math.hypot(L[23][0]-L[27][0],L[23][1]-L[27][1]),Math.hypot(L[24][0]-L[28][0],L[24][1]-L[28][1]));});
+  ll.sort((a,b)=>a-b);const sc=ll[ll.length>>1]||1;
+  const P=(i,s,side)=>{const L=list[V[i]].lm,ids=(side==='L')!==(s===1)?LEGL:LEGR;return ids.map(k=>L[k]);};
+  // 状態 s=1 は「左右を入れ替える」。コスト＝等速予測からのずれ（初めの2コマは位置のずれ）
+  const cost=(t,c,a,b)=>{let d=0;for(const side of['L','R']){const p2=t>=2?P(t-2,c,side):null,p1=P(t-1,a,side),p0=P(t,b,side);
+    for(let k=0;k<p0.length;k++){const w=Math.min(p0[k][2],p1[k][2])+0.05;const px=p2?2*p1[k][0]-p2[k][0]:p1[k][0],py=p2?2*p1[k][1]-p2[k][1]:p1[k][1];d+=w*Math.hypot(p0[k][0]-px,p0[k][1]-py)/sc;}}return d;};
+  const n=V.length,INF=1e18;
+  // dp[t][a*2+b]：(s_{t-1}=a, s_t=b)
+  let dp=[0,1,2,3].map(st=>{const a=st>>1,b=st&1;return a===0?cost(1,0,a,b):INF;});
+  const back=[null,null];
+  for(let t=2;t<n;t++){const nd=[INF,INF,INF,INF],bk=[0,0,0,0];
+    for(let a=0;a<2;a++)for(let b=0;b<2;b++)for(let c=0;c<2;c++){const v=dp[c*2+a]+cost(t,c,a,b);if(v<nd[a*2+b]){nd[a*2+b]=v;bk[a*2+b]=c;}}
+    dp=nd;back.push(bk);}
+  let best=0;for(let st=1;st<4;st++)if(dp[st]<dp[best])best=st;
+  const S=new Array(n);S[n-1]=best&1;S[n-2]=best>>1;
+  for(let t=n-1;t>=2;t--){S[t-2]=back[t][S[t-2+1]*2+S[t]];}
+  let count=0;
+  S.forEach((st,t)=>{if(st){const i=V[t],L=list[i].lm.map(p=>p.slice());for(let k=0;k<LEGL.length;k++){const a=LEGL[k],b=LEGR[k],tmp=L[a];L[a]=L[b];L[b]=tmp;}out[i].lm=L;out[i].swapped=true;count++;}});
+  // 入れ替えが多数派なら、元のラベルを正とみなして全体を反転し直す
+  if(count>V.length/2){count=0;out.forEach((o,i)=>{if(!list[i].lm)return;const sw=!o.swapped;o.swapped=sw;o.lm=sw?(()=>{const L=list[i].lm.map(p=>p.slice());for(let k=0;k<LEGL.length;k++){const a=LEGL[k],b=LEGR[k],tmp=L[a];L[a]=L[b];L[b]=tmp;}return L;})():list[i].lm;if(sw)count++;});}
+  return{list:out,count};
+}
+// ---- 精度改善：外れ値の除去（ハンペルフィルタ。外れた点を欠損にして後で補間） ----
+function hampel(a,k,minThr){
+  const y=a.slice();let removed=0;
+  for(let i=0;i<a.length;i++){
+    if(a[i]==null)continue;
+    const w=[];for(let j=Math.max(0,i-k);j<=Math.min(a.length-1,i+k);j++)if(a[j]!=null)w.push(a[j]);
+    if(w.length<5)continue;
+    w.sort((p,q)=>p-q);const med=w[w.length>>1];
+    const dev=w.map(v=>Math.abs(v-med)).sort((p,q)=>p-q),mad=1.4826*dev[dev.length>>1];
+    if(Math.abs(a[i]-med)>Math.max(3*mad,minThr)){y[i]=null;removed++;}
+  }
+  return{y,removed};
+}
+// 体節の長さが中央値から大きく外れたコマの点を除外
+function segCheck(pts,pairs,tol){
+  let removed=0;
+  for(const[a,b]of pairs){
+    const L=pts[a].x.map((x,i)=>x!=null&&pts[b].x[i]!=null&&pts[a].y[i]!=null&&pts[b].y[i]!=null?Math.hypot(x-pts[b].x[i],pts[a].y[i]-pts[b].y[i]):null);
+    const v=L.filter(x=>x!=null).sort((p,q)=>p-q);if(v.length<5)continue;const med=v[v.length>>1];
+    L.forEach((l,i)=>{if(l!=null&&(l<med*(1-tol)||l>med*(1+tol))){pts[b].x[i]=null;pts[b].y[i]=null;removed++;}});
+  }
+  return removed;
+}
+const accOn=k=>{const el=$(k);return!el||el.checked;};
+
+function smooth(a,fc,fs){if(!(fc>0)||fc*1.25>=fs/2)return a.slice();const y=a.slice();let i=0;
+  while(i<y.length){if(y[i]==null){i++;continue;}let j=i;while(j<y.length&&y[j]!=null)j++;
+    if(j-i>=12){const s=filtfilt(y.slice(i,j),fc/0.802,fs);for(let k=i;k<j;k++)y[k]=s[k-i];}i=j;}
+  return y;}
+function extrema(a,type,w){
+  const v=a.filter(x=>x!=null).sort((p,q)=>p-q);if(v.length<5)return[];
+  const med=v[Math.floor(v.length/2)],out=[];
+  for(let i=w;i<a.length-w;i++){
+    const x=a[i];if(x==null)continue;
+    if(type==='max'?x<=med:x>=med)continue;
+    let ok=true,cnt=0;
+    for(let j=i-w;j<=i+w&&ok;j++){if(j===i||a[j]==null)continue;cnt++;
+      if(type==='max'?(j<i?a[j]>=x:a[j]>x):(j<i?a[j]<=x:a[j]<x))ok=false;}
+    if(ok&&cnt>=w)out.push(i);
+  }
+  return out;
+}
+function angles(p){
+  const r={trunk:null,hip:null,knee:null,ankle:null};
+  const down=(a,b)=>deg(Math.atan2(b.x-a.x,-(b.y-a.y)));
+  const{sh,hip,knee,ank,heel,toe}=p;
+  if(sh&&hip)r.trunk=deg(Math.atan2(sh.x-hip.x,sh.y-hip.y));
+  const th=hip&&knee?down(hip,knee):null,sk=knee&&ank?down(knee,ank):null;
+  if(sh&&hip&&th!=null)r.hip=wrap(th-down(sh,hip));
+  if(th!=null&&sk!=null)r.knee=wrap(th-sk);
+  if(heel&&toe&&sk!=null)r.ankle=wrap(deg(Math.atan2(toe.y-heel.y,toe.x-heel.x))-sk);
+  r.shank=sk;
+  return r;
+}
+// 前額面：骨盤（＋＝右が低い）、体幹側屈（＋＝右へ）、膝FPPA（＋＝外反）
+function frontal(p){
+  const r={obliq:null,tlat:null,kneeR:null,kneeL:null};
+  const{hipR,hipL,shR,shL,kneeR,kneeL,ankR,ankL}=p;
+  if(hipR&&hipL){
+    r.obliq=deg(Math.atan2(hipL.y-hipR.y,Math.abs(hipL.x-hipR.x)));
+    if(shR&&shL){const hm={x:(hipR.x+hipL.x)/2,y:(hipR.y+hipL.y)/2},sm={x:(shR.x+shL.x)/2,y:(shR.y+shL.y)/2},sR=Math.sign(hipR.x-hipL.x)||1;
+      r.tlat=deg(Math.atan2((sm.x-hm.x)*sR,sm.y-hm.y));}
+    const fppa=(hip,knee,ank,other)=>{
+      if(!hip||!knee||!ank)return null;
+      const a={x:knee.x-hip.x,y:knee.y-hip.y},b={x:ank.x-knee.x,y:ank.y-knee.y};
+      const c=(a.x*b.x+a.y*b.y)/(Math.hypot(a.x,a.y)*Math.hypot(b.x,b.y)||1);
+      const mag=deg(Math.acos(Math.max(-1,Math.min(1,c))));
+      const t=(ank.y-hip.y)?(knee.y-hip.y)/(ank.y-hip.y):0.5,lx=hip.x+(ank.x-hip.x)*t;
+      const medial=Math.sign(other.x-hip.x)||1;
+      return(knee.x-lx)*medial>=0?mag:-mag;
+    };
+    r.kneeR=fppa(hipR,kneeR,ankR,hipL);r.kneeL=fppa(hipL,kneeL,ankL,hipR);
+  }
+  return r;
+}
+function stats(a){a=a.filter(v=>v!=null&&isFinite(v));if(!a.length)return null;const n=a.length,m=a.reduce((s,v)=>s+v,0)/n;
+  return{m,sd:n>1?Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(n-1)):null,n};}
+
+function compute(s,quiet){
+  const keep=null;
+  s.A=s.kind==='sag'?computeSag(s):computeFro(s);
+  if(!quiet){renderSlots();if(s.id===act){renderSlotResults();show(s.cur);}renderReport();}
+}
+function computeSag(s){
+  const fs=s.capFps/s.samples.step,warns=[],acc={swap:0,out:0};
+  let list=s.samples.list;
+  if(accOn('optSwap')){const r=fixSwaps(list);list=r.list;acc.swap=r.count;}
+  const n=list.length;
+  const mv=ids=>{let t=0,c=0;list.forEach(o=>{if(o.lm)ids.forEach(i=>{t+=o.lm[i][2];c++;});});return c?t/c:0;};
+  const side=s.side,vl=mv([23,25,27,29,31]),vr=mv([24,26,28,30,32]);
+  if((side==='L'&&vr>vl+0.1)||(side==='R'&&vl>vr+0.1))warns.push(`${SN[side==='L'?'R':'L']}脚のほうがカメラ側に見えます。撮影方向（${s.n}）が正しいか確認してください。`);
+  const midX=list.map(o=>o.lm?(o.lm[23][0]+o.lm[24][0])/2:null).filter(v=>v!=null);
+  let dir=+s.dir||0;
+  if(!dir)dir=midX.length>1&&midX[midX.length-1]<midX[0]?-1:1;
+  if(midX.length>1&&Math.abs(midX[midX.length-1]-midX[0])<s.vw*0.15)warns.push('人物の移動距離が小さいため、接地の自動判定が不安定な可能性があります。詳細設定で進行方向を指定してください。');
+  const ix=IDX[side],fc=+$('fc').value,maxGap=Math.max(1,Math.round(0.1*fs)),ser={},vis={};
+  // 生の座標 → 体節長チェック → ハンペルフィルタ → 補間 → 平滑化
+  const rawS={};PTS.forEach(k=>{rawS[k]={x:list.map(o=>{if(!o.lm)return null;const p=o.lm[ix[k]];return p[2]<0.3?null:dir*p[0];}),y:list.map(o=>{if(!o.lm)return null;const p=o.lm[ix[k]];return p[2]<0.3?null:-p[1];})};vis[k]=list.map(o=>o.lm?o.lm[ix[k]][2]:0);});
+  const legPx=(()=>{const d=[];list.forEach((o,i)=>{if(rawS.hip.x[i]!=null&&rawS.ank.x[i]!=null)d.push(Math.hypot(rawS.hip.x[i]-rawS.ank.x[i],rawS.hip.y[i]-rawS.ank.y[i]));});d.sort((a,b)=>a-b);return d.length?d[d.length>>1]:s.vh*0.4;})();
+  if(accOn('optOut')){
+    acc.out+=segCheck(rawS,[['hip','knee'],['knee','ank'],['heel','toe']],0.3);
+    const k=Math.max(2,Math.round(0.1*fs));
+    PTS.forEach(p=>['x','y'].forEach(ax=>{const r=hampel(rawS[p][ax],k,0.06*legPx);rawS[p][ax]=r.y;acc.out+=r.removed;}));
+    PTS.forEach(p=>rawS[p].x.forEach((v,i)=>{if(v==null||rawS[p].y[i]==null){rawS[p].x[i]=null;rawS[p].y[i]=null;}}));
+  }
+  const gap=accOn('optOut')?Math.max(maxGap,Math.round(0.15*fs)):maxGap;
+  PTS.forEach(k=>{ser[k]={x:smooth(fillGaps(rawS[k].x,gap),fc,fs),y:smooth(fillGaps(rawS[k].y,gap),fc,fs)};});
+  const hipO=IDX[side==='R'?'L':'R'].hip;
+  const pel=list.map((o,i)=>{if(ser.hip.x[i]==null)return null;if(o.lm&&o.lm[hipO][2]>=0.1)return(ser.hip.x[i]+dir*o.lm[hipO][0])/2;return ser.hip.x[i];});
+  const pelS=smooth(fillGaps(pel,maxGap),fc,fs);
+  const ang=list.map((o,i)=>{const p={};PTS.forEach(k=>{p[k]=ser[k].x[i]!=null&&ser[k].y[i]!=null?{x:ser[k].x[i],y:ser[k].y[i]}:null;});return angles(p);});
+  const icSig=pelS.map((v,i)=>v!=null&&ser.heel.x[i]!=null?ser.heel.x[i]-v:null);
+  const toSig=pelS.map((v,i)=>v!=null&&ser.toe.x[i]!=null?ser.toe.x[i]-v:null);
+  const w=Math.max(2,Math.round(0.3*fs)),ics=extrema(icSig,'max',w),tos=extrema(toSig,'min',w),head=ser.ear.y;
+  // 反対側の脚（カメラから遠い側）：信頼度のしきい値を下げて推定
+  const io=IDX[side==='R'?'L':'R'],oser={};
+  ['heel','toe','ank'].forEach(k=>{let x=list.map(o=>{if(!o.lm)return null;const p=o.lm[io[k]];return p[2]<0.1?null:dir*p[0];});
+    if(accOn('optOut'))x=hampel(x,Math.max(2,Math.round(0.1*fs)),0.06*legPx).y;
+    oser[k]={x:smooth(fillGaps(x,gap),fc,fs)};});
+  const icO=extrema(pelS.map((v,i)=>v!=null&&oser.heel.x[i]!=null?oser.heel.x[i]-v:null),'max',w);
+  const toO=extrema(pelS.map((v,i)=>v!=null&&oser.toe.x[i]!=null?oser.toe.x[i]-v:null),'min',w);
+  const legLen=(()=>{const d=[];list.forEach((o,i)=>{if(ser.hip.x[i]!=null&&ser.ank.x[i]!=null)d.push(Math.hypot(ser.hip.x[i]-ser.ank.x[i],ser.hip.y[i]-ser.ank.y[i]));});d.sort((a,b)=>a-b);return d.length?d[d.length>>1]:1;})();
+  const cycles=[];
+  ics.forEach((ic,k)=>{
+    const nextIc=k+1<ics.length?ics[k+1]:n;
+    const to=tos.find(t=>t>ic&&t<nextIc&&t-ic<2.5*fs);if(to==null)return;
+    let pk=null,best=-Infinity;for(let i=ic;i<=to;i++)if(head[i]!=null&&head[i]>best){best=head[i];pk=i;}
+    if(pk==null)return;
+    const nic=k+1<ics.length&&ics[k+1]-ic<3*fs?ics[k+1]:null;
+    // 反対側の足尖離地・初期接地
+    const oTO=toO.find(t=>t>ic&&t<pk)??null;
+    const oIC=icO.find(t=>t>(oTO??pk)&&t<to)??null;
+    // 踵離地：立脚期の踵の最下点から一定以上上昇した最初の瞬間
+    let HO=null;{let base=Infinity,top=-Infinity;for(let i=ic;i<=to;i++){const y=ser.heel.y[i];if(y!=null){base=Math.min(base,y);top=Math.max(top,y);}}
+      if(isFinite(base)){const thr=Math.max(0.02*legLen,0.1*(top-base));for(let i=(oTO??pk);i<=to;i++){const y=ser.heel.y[i];if(y!=null&&y-base>thr){HO=i;break;}}}}
+    if(HO!=null&&oIC!=null&&HO>oIC)HO=null;
+    // 足部の並列：遊脚側の足首が反対側の足首を追い越した瞬間
+    let FA=null,TV=null;
+    if(nic!=null){
+      for(let i=to+1;i<nic;i++){const a=ser.ank.x[i],b=oser.ank.x[i];if(a!=null&&b!=null&&a-b>=0){FA=i;break;}}
+      for(let i=(FA??to)+1;i<nic;i++){const sh=ang[i].shank;if(sh!=null&&sh>=0){TV=i;break;}}
+    }
+    cycles.push({ic,peak:pk,to,nic,ph:{oTO,HO,oIC,FA,TV},use:true});
+  });
+  if(!cycles.length)warns.push('歩行イベントを検出できませんでした。全身が映っているか、2歩以上の歩行が含まれているか確認してください。');
+  const lowVis=i=>['sh','hip','knee','ank','heel','toe'].some(k=>vis[k][i]<0.5);
+  const byFrame=new Map();list.forEach((o,i)=>byFrame.set(o.f,i));
+  if(cycles.length&&cycles.every(c=>c.ph.oTO==null&&c.ph.oIC==null))warns.push('反対側の足の接地・離地を検出できず、一部の相に分けられませんでした。');
+  return{type:'sag',samples:list,side,dir,ang,cycles,lowVis,byFrame,fs,fsReal:s.capFps,warns,acc};
+}
+function computeFro(s){
+  const list=s.samples.list,fs=s.capFps/s.samples.step,warns=[],fc=+$('fc').value,maxGap=Math.max(1,Math.round(0.1*fs));
+  const front=s.view==='front';
+  // 左右は画像上の位置で判定（正面：人の右＝画面の左、背面：人の右＝画面の右）
+  const pairs={sh:[11,12],hip:[23,24],knee:[25,26],ank:[27,28]},raw={};
+  Object.entries(pairs).forEach(([k,[a,b]])=>{
+    raw[k+'R']={x:[],y:[]};raw[k+'L']={x:[],y:[]};
+    list.forEach(o=>{
+      let R=null,L=null;
+      if(o.lm&&Math.min(o.lm[a][2],o.lm[b][2])>=0.3){const p=o.lm[a],q=o.lm[b],lo=p[0]<=q[0]?p:q,hi=p[0]<=q[0]?q:p;R=front?lo:hi;L=front?hi:lo;}
+      raw[k+'R'].x.push(R?R[0]:null);raw[k+'R'].y.push(R?-R[1]:null);raw[k+'L'].x.push(L?L[0]:null);raw[k+'L'].y.push(L?-L[1]:null);
+    });
+  });
+  const acc={swap:0,out:0};
+  if(accOn('optOut')){
+    const wd=[];list.forEach((o,i)=>{if(raw.hipR.x[i]!=null&&raw.hipL.x[i]!=null)wd.push(Math.abs(raw.hipR.x[i]-raw.hipL.x[i]));});wd.sort((a,b)=>a-b);
+    const thr=0.25*(wd.length?wd[wd.length>>1]:s.vw*0.05),k=Math.max(2,Math.round(0.1*fs));
+    Object.values(raw).forEach(v=>['x','y'].forEach(ax=>{const r=hampel(v[ax],k,thr);v[ax]=r.y;acc.out+=r.removed;}));
+  }
+  const gap=accOn('optOut')?Math.max(maxGap,Math.round(0.15*fs)):maxGap;
+  const ser={};Object.entries(raw).forEach(([k,v])=>{ser[k]={x:smooth(fillGaps(v.x,gap),fc,fs),y:smooth(fillGaps(v.y,gap),fc,fs)};});
+  const P=(k,i)=>ser[k].x[i]!=null&&ser[k].y[i]!=null?{x:ser[k].x[i],y:ser[k].y[i]}:null;
+  const fr=list.map((o,i)=>frontal({hipR:P('hipR',i),hipL:P('hipL',i),shR:P('shR',i),shL:P('shL',i),kneeR:P('kneeR',i),kneeL:P('kneeL',i),ankR:P('ankR',i),ankL:P('ankL',i)}));
+  // 遊脚側の足首が最も高い瞬間＝反対側の立脚中期
+  const d=list.map((o,i)=>ser.ankL.y[i]!=null&&ser.ankR.y[i]!=null?ser.ankL.y[i]-ser.ankR.y[i]:null);
+  const w=Math.max(2,Math.round(0.3*fs));
+  const items=[...extrema(d,'max',w).map(i=>({key:'mR',i,use:true})),...extrema(d,'min',w).map(i=>({key:'mL',i,use:true}))].sort((a,b)=>a.i-b.i);
+  if(!items.length)warns.push('立脚中期を検出できませんでした。全身が映っているか、2歩以上の歩行が含まれているか確認してください。');
+  const ev=list.map((o,i)=>({R:{pelvis:fr[i].obliq!=null?-fr[i].obliq:null,tlat:fr[i].tlat,fknee:fr[i].kneeR},L:{pelvis:fr[i].obliq,tlat:fr[i].tlat!=null?-fr[i].tlat:null,fknee:fr[i].kneeL}}));
+  const evAt=c=>ev[c.i][c.key==='mR'?'R':'L'];
+  const vis=list.map(o=>o.lm?Math.min(...[11,12,23,24,25,26,27,28].map(k=>o.lm[k][2])):0);
+  const lowVis=i=>vis[i]<0.5;
+  const byFrame=new Map();list.forEach((o,i)=>byFrame.set(o.f,i));
+  const A={type:'fro',samples:list,fr,cycles:items,lowVis,byFrame,fs,warns,view:s.view,acc};
+  A.ev=items.map(evAt);A.evAt=evAt;
+  return A;
+}
+function froVal(A,c){return A.evAt(c);}
+
+/* ---------- 歩行周期の8相 ---------- */
+const PHASES=[
+  {k:'IC',n:'初期接地',a:'ic',b:'ic',ref:[0,2],role:'踵から接地し、衝撃吸収の準備をする'},
+  {k:'LR',n:'荷重応答期',a:'ic',b:'oTO',ref:[0,12],role:'膝の屈曲と足関節の底屈で衝撃を吸収し、体重を受け継ぐ'},
+  {k:'MSt',n:'立脚中期',a:'oTO',b:'HO',ref:[12,31],role:'下腿が前傾し、支持脚の上を身体が前進する'},
+  {k:'TSt',n:'立脚終期',a:'HO',b:'oIC',ref:[31,50],role:'踵が離れ、身体を支持脚より前へ運ぶ'},
+  {k:'PSw',n:'前遊脚期',a:'oIC',b:'to',ref:[50,62],role:'膝屈曲と底屈で遊脚の準備をする'},
+  {k:'ISw',n:'遊脚初期',a:'to',b:'FA',ref:[62,75],role:'膝を曲げて足部を床から離す'},
+  {k:'MSw',n:'遊脚中期',a:'FA',b:'TV',ref:[75,87],role:'足部のクリアランスを保ちながら脚を前へ運ぶ'},
+  {k:'TSw',n:'遊脚終期',a:'TV',b:'nic',ref:[87,100],role:'膝を伸ばして次の接地に備える'}
+];
+const PHK=Object.fromEntries(PHASES.map(p=>[p.k,p]));
+// 相ごとの判定：[指標(max/min/end/pct), 関節, 比較, 値]
+const PCHECK=[
+  {ph:'IC',n:'前足部接地（踵接地の欠如）',c:['end','ankle','<',-10],d:'接地時に足関節が底屈10°を超える（目安 0°）'},
+  {ph:'IC',n:'初期接地時の膝屈曲増大',c:['end','knee','>',15],d:'接地時の膝屈曲が15°を超える（目安 0〜5°）'},
+  {ph:'LR',n:'荷重応答期の膝屈曲不足（衝撃吸収の低下）',c:['max','knee','<',5],d:'膝屈曲の最大が5°未満（目安 約15°）'},
+  {ph:'LR',n:'荷重応答期の過度な膝屈曲',c:['max','knee','>',25],d:'膝屈曲の最大が25°を超える'},
+  {ph:'LR',n:'ヒールロッカーの不足（底屈が起きない）',c:['min','ankle','>',0],d:'足関節が底屈しない（目安 底屈5〜10°）'},
+  {ph:'LR',n:'荷重応答期（両脚支持期）の延長',c:['pct',null,'>',18],d:'歩行周期の18%を超える（目安 約10〜12%）'},
+  {ph:'MSt',n:'立脚中期の膝過伸展（ロッキング）',c:['min','knee','<',-5],d:'膝が伸展5°を超える'},
+  {ph:'MSt',n:'立脚中期に膝が伸びきらない（屈曲位保持）',c:['min','knee','>',15],d:'膝屈曲の最小が15°を超える（目安 0〜5°）'},
+  {ph:'MSt',n:'アンクルロッカーの不足（背屈不足）',c:['max','ankle','<',5],d:'背屈の最大が5°未満（目安 背屈5〜10°）'},
+  {ph:'MSt',n:'立脚中期の体幹前傾',c:['max','trunk','>',10],d:'体幹前傾が10°を超える'},
+  {ph:'MSt',n:'立脚中期の体幹後傾',c:['min','trunk','<',-5],d:'体幹後傾が5°を超える'},
+  {ph:'TSt',n:'立脚終期の股関節伸展不足',c:['min','hip','>',0],d:'股関節が伸展位に達しない（目安 伸展10〜20°・体幹基準のため参考）'},
+  {ph:'TSt',n:'立脚終期の過度な背屈（下腿三頭筋の機能低下を示唆）',c:['max','ankle','>',20],d:'背屈が20°を超える'},
+  {ph:'PSw',n:'前遊脚期の底屈不足（蹴り出し不足）',c:['min','ankle','>',-10],d:'底屈の最大が10°未満（目安 底屈15〜20°）'},
+  {ph:'PSw',n:'前遊脚期の膝屈曲不足',c:['end','knee','<',30],d:'足尖離地時の膝屈曲が30°未満（目安 約40°）'},
+  {ph:'PSw',n:'前遊脚期（両脚支持期）の延長',c:['pct',null,'>',18],d:'歩行周期の18%を超える（目安 約12%）'},
+  {ph:'ISw',n:'遊脚初期の膝屈曲不足（つまずきの恐れ）',c:['max','knee','<',50],d:'膝屈曲の最大が50°未満（目安 約60°）'},
+  {ph:'ISw',n:'遊脚初期の股関節屈曲不足',c:['max','hip','<',10],d:'股関節屈曲の最大が10°未満（目安 約20°）'},
+  {ph:'MSw',n:'遊脚中期の下垂足（背屈不足）',c:['min','ankle','<',-10],d:'足関節が底屈10°を超える（目安 0°前後）'},
+  {ph:'MSw',n:'遊脚中期の股関節屈曲不足',c:['max','hip','<',20],d:'股関節屈曲の最大が20°未満（目安 約25°）'},
+  {ph:'TSw',n:'遊脚終期の膝伸展不足',c:['end','knee','>',15],d:'接地直前の膝屈曲が15°を超える（目安 0〜5°）'},
+  {ph:'TSw',n:'遊脚終期の下垂足',c:['end','ankle','<',-10],d:'接地直前に足関節が底屈10°を超える'}
+];
+const GCHECK=[
+  {n:'立脚期の延長',f:g=>g.stance>65,d:'立脚期が歩行周期の65%を超える（目安 約60%）'},
+  {n:'立脚期の短縮',f:g=>g.stance<55,d:'立脚期が歩行周期の55%未満（目安 約60%）'},
+  {n:'両脚支持期の延長',f:g=>g.ds!=null&&g.ds>30,d:'両脚支持期の合計が30%を超える（目安 約20〜24%）'}
+];
+const bound=(c,key)=>key==='ic'||key==='to'||key==='nic'?c[key]:c.ph[key];
+function phaseMetrics(A,c,p){
+  const a=bound(c,p.a),b=bound(c,p.b);if(a==null||b==null||b<a)return null;
+  const m={a,b,max:{},min:{},end:{},dur:(A.samples[b].f-A.samples[a].f)/A.fsReal,pct:c.nic!=null?(b-a)/(c.nic-c.ic)*100:null};
+  for(const j of JOINTS){let mx=null,mn=null;for(let i=a;i<=b;i++){const v=A.ang[i][j.k];if(v==null)continue;mx=mx==null?v:Math.max(mx,v);mn=mn==null?v:Math.min(mn,v);}
+    m.max[j.k]=mx;m.min[j.k]=mn;m.end[j.k]=A.ang[b][j.k];}
+  return m;
+}
+function evalCheck(m,c){const[f,k,op,v]=c;const x=f==='pct'?m.pct:m[f][k];if(x==null||!isFinite(x))return false;return op==='<'?x<v:x>v;}
+function phaseReport(s){
+  const A=s.A;if(!A||A.type!=='sag')return null;
+  const used=A.cycles.filter(c=>c.use),out=[];
+  for(const p of PHASES){
+    const ms=used.map(c=>({c,m:phaseMetrics(A,c,p)})).filter(x=>x.m),N=ms.length;
+    const pct=stats(ms.map(x=>x.m.pct)),dur=stats(ms.map(x=>x.m.dur));
+    const probs=[];
+    if(N)for(const ck of PCHECK.filter(k=>k.ph===p.k)){const hit=ms.filter(x=>evalCheck(x.m,ck.c));if(hit.length&&hit.length*2>=N)probs.push({n:ck.n,d:ck.d,hit:hit.length,N,low:hit.some(x=>A.lowVis(x.m.b))});}
+    if(p.k==='TSt'){const miss=used.filter(c=>c.ph.HO==null&&c.ph.oIC!=null).length;if(miss&&miss*2>=used.length)probs.push({n:'踵離地の遅延・欠如',d:'立脚終期に踵の上昇を検出できない',hit:miss,N:used.length,low:false});}
+    out.push({p,N,pct,dur,probs,undet:used.length-N});
+  }
+  const g=used.filter(c=>c.nic!=null).map(c=>{const T=c.nic-c.ic,lr=c.ph.oTO!=null?(c.ph.oTO-c.ic)/T*100:null,ps=c.ph.oIC!=null?(c.to-c.ph.oIC)/T*100:null;
+    return{stance:(c.to-c.ic)/T*100,ds:lr!=null&&ps!=null?lr+ps:null,dur:(A.samples[c.nic].f-A.samples[c.ic].f)/A.fsReal};});
+  const gs={stance:stats(g.map(x=>x.stance)),ds:stats(g.map(x=>x.ds)),cyc:stats(g.map(x=>x.dur)),N:g.length,probs:[]};
+  for(const ck of GCHECK){const hit=g.filter(ck.f);if(g.length&&hit.length*2>=g.length&&hit.length)gs.probs.push({n:ck.n,d:ck.d,hit:hit.length,N:g.length});}
+  return{phases:out,gait:gs};
+}
+const PHC=['#5b8def','#2fb3a0','#7cc36b','#d8b13a','#e58a3c','#c9608a','#8e6fd6','#5a7fa8'];
+function phaseHtml(s,side){
+  const R=phaseReport(s);if(!R)return'';
+  const{phases,gait}=R;
+  let h=`<h2 style="margin-top:6px">歩行周期の相（${SN[side]}・8相）</h2>`;
+  const segs=phases.filter(x=>x.p.k!=='IC'&&x.pct);
+  if(segs.length){const tot=segs.reduce((a,x)=>a+x.pct.m,0)||1;
+    h+=`<div style="display:flex;height:26px;border-radius:6px;overflow:hidden;font-size:10px;color:#fff;font-weight:600">${segs.map((x,i)=>`<div title="${x.p.n}" style="width:${x.pct.m/tot*100}%;background:${PHC[PHASES.indexOf(x.p)]};display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap">${x.p.k}</div>`).join('')}</div>`;}
+  h+=`<div class="tablewrap"><table><thead><tr><th>相</th><th>時間</th><th>%GC<br><small>（目安）</small></th><th>判定</th></tr></thead><tbody>${phases.map(x=>`<tr><td><span class="jdot" style="background:${PHC[PHASES.indexOf(x.p)]}"></span>${x.p.n}</td><td>${x.p.k==='IC'?'—':x.dur?x.dur.m.toFixed(2)+' s':'—'}</td><td>${x.p.k==='IC'?'—':x.pct?x.pct.m.toFixed(0)+'%':'—'}<br><small>${x.p.ref[0]}〜${x.p.ref[1]}%</small></td><td>${!x.N?'<span class="muted">検出できず</span>':x.probs.length?`<span class="diff">${x.probs.length}件</span>`:'問題なし'}</td></tr>`).join('')}</tbody></table></div>`;
+  h+=`<div class="muted">立脚期 ${gait.stance?gait.stance.m.toFixed(0)+'%':'—'}（目安 約60%）／両脚支持期 ${gait.ds?gait.ds.m.toFixed(0)+'%':'—'}（目安 約20〜24%）／1周期 ${gait.cyc?gait.cyc.m.toFixed(2)+' s':'—'}。%GCの目安はPerry（2010）。</div>`;
+  h+=`<h2 style="margin-top:6px">相ごとの問題レポート（${SN[side]}）</h2><div style="display:flex;flex-direction:column;gap:6px">`;
+  h+=phases.map(x=>`<div class="pat" style="border-left-color:${PHC[PHASES.indexOf(x.p)]}"><b>${x.p.n}</b><small>正常な役割：${x.p.role}</small>${
+    !x.N?'<span class="muted">この相の区切りを検出できませんでした（反対側の足が見えにくい、または周期が動画の端で切れています）。</span>':
+    x.probs.length?x.probs.map(pr=>`<span>・<b>${pr.n}</b>${q(pr.low)}　<small>${pr.d}／${pr.hit}/${pr.N}周期</small></span>`).join(''):'<span>問題は見つかりませんでした</span>'}</div>`).join('');
+  if(gait.probs.length)h+=`<div class="pat"><b>歩行周期全体（時間）</b>${gait.probs.map(pr=>`<span>・<b>${pr.n}</b>　<small>${pr.d}／${pr.hit}/${pr.N}周期</small></span>`).join('')}</div>`;
+  h+='</div>';
+  return h;
+}
+
+/* ---------- 所見 ---------- */
+function findingsOf(s){
+  const A=s.A,out=[];if(!A)return out;
+  const used=A.cycles.filter(c=>c.use);
+  if(A.type==='sag'){
+    const N=used.length;if(!N)return out;
+    for(const e of['ic','peak','to'])for(const j of JOINTS){
+      const r=RANGE[e][j.k],xs=used.map(c=>A.ang[c[e]][j.k]).filter(v=>v!=null);if(!xs.length)continue;
+      const m=xs.reduce((a,b)=>a+b,0)/xs.length,o=xs.filter(v=>v<r[0]||v>r[1]).length;
+      if(m<r[0]||m>r[1])out.push({type:'値',side:A.side,label:`${EVN[e]}・${j.n}`,val:clin(j.k,m),ref:rangeTxt(j.k,r),cnt:`${o}/${xs.length}`,low:used.some(c=>A.lowVis(c[e]))});
+    }
+    for(const p of PATTERNS){
+      const hit=used.filter(c=>{const v=A.ang[c[p.e]][p.k];return v!=null&&(p.op==='<'?v<p.v:v>p.v);});
+      if(hit.length&&hit.length*2>=N)out.push({type:'型',side:A.side,label:p.n,desc:p.d,cnt:`${hit.length}/${N}`,low:hit.some(c=>A.lowVis(c[p.e]))});
+    }
+  }else{
+    for(const side of['R','L']){
+      const items=used.filter(c=>c.key==='m'+side),N=items.length;if(!N)continue;
+      for(const j of FJ){
+        const r=RANGE.mid[j.k],xs=items.map(c=>froVal(A,c)[j.k]).filter(v=>v!=null);if(!xs.length)continue;
+        const m=xs.reduce((a,b)=>a+b,0)/xs.length,o=xs.filter(v=>v<r[0]||v>r[1]).length;
+        if(m<r[0]||m>r[1])out.push({type:'値',side,label:`${EVN['m'+side]}・${j.n}`,val:clin(j.k,m),ref:rangeTxt(j.k,r),cnt:`${o}/${xs.length}`,low:items.some(c=>A.lowVis(c.i))});
+      }
+      for(const p of FPATTERNS){
+        const hit=items.filter(c=>{const v=froVal(A,c)[p.k];return v!=null&&(p.op==='<'?v<p.v:v>p.v);});
+        if(hit.length&&hit.length*2>=N)out.push({type:'型',side,label:p.n,desc:p.d,cnt:`${hit.length}/${N}`,low:hit.some(c=>A.lowVis(c.i))});
+      }
+    }
+  }
+  return out;
+}
+const q=x=>x?' <span class="q" title="検出信頼度が低い場面を含む">⚠</span>':'';
+function findingsHtml(list,withSrc){
+  const vals=list.filter(f=>f.type==='値'),pats=list.filter(f=>f.type==='型');
+  let h='<h2 style="margin-top:6px">異常値の一覧</h2>';
+  h+=vals.length?`<div class="tablewrap"><table><thead><tr><th>${withSrc?'動画・':''}側・場面・項目</th><th>平均</th><th>判定幅</th><th>外れ</th></tr></thead><tbody>${vals.map(v=>`<tr><td>${withSrc?v.src+'・':''}${SN[v.side]}・${v.label}${q(v.low)}</td><td><b>${v.val}</b></td><td><small>${v.ref}</small></td><td><small>${v.cnt}</small></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:0">判定幅を外れた平均値はありません。</p>';
+  h+='<h2 style="margin-top:6px">異常パターンの候補</h2>';
+  h+=pats.length?`<div style="display:flex;flex-direction:column;gap:6px">${pats.map(x=>`<div class="pat"><span class="src">${withSrc?x.src+'・':''}${SN[x.side]}</span><b>${x.label}${q(x.low)}</b><span>${x.desc}</span><small>${x.cnt}で該当</small></div>`).join('')}</div>`:'<p class="muted" style="margin:0">該当するパターンはありません。</p>';
+  return h;
+}
+
+/* ---------- 枠ごとの結果 ---------- */
+function renderSlotResults(){
+  const s=sl(),A=s.A;
+  $('resCard').hidden=!A;if(!A)return;
+  $('resTitle').textContent=`結果：${s.n}`;
+  $('meta').textContent=A.type==='sag'
+    ?`解析脚：${SN[A.side]}　進行方向：${A.dir===1?'左→右':'右→左'}　サンプリング：${A.fs.toFixed(0)} Hz　平滑化：${+$('fc').value>0?$('fc').value+' Hz':'なし'}　${s.name}`
+    :`前額面（${s.view==='front'?'正面':'背面'}）・左右両脚　サンプリング：${A.fs.toFixed(0)} Hz　平滑化：${+$('fc').value>0?$('fc').value+' Hz':'なし'}　${s.name}`;
+  $('warns').innerHTML=A.warns.map(t=>`<div class="warn">${t}</div>`).join('');
+  const nPts=A.samples.filter(o=>o.lm).length;
+  $('meta').textContent+=`　AI：${s.engine||'MediaPipe（端末内）'}`;
+  $('meta').textContent+=`　精度補正：${A.type==='sag'?(accOn('optSwap')?`左右の取り違え ${A.acc.swap}/${nPts}コマ補正`:'左右補正なし')+'・':''}${accOn('optOut')?`外れ値 ${A.acc.out}点を除去`:'外れ値除去なし'}`;
+  const used=A.cycles.filter(c=>c.use);
+  const cell=(k,st)=>st?`${clin(k,st.m)}${st.sd!=null?` <small>±${st.sd.toFixed(1)}</small>`:''}`:'—';
+  let h;
+  if(A.type==='sag'){
+    h=`<table><thead><tr><th>平均±SD<br><small>（目安）</small></th>${JOINTS.map(j=>`<th><span class="jdot" style="background:var(${j.c})"></span>${j.n}</th>`).join('')}</tr></thead><tbody>`;
+    for(const e of['ic','peak','to'])h+=`<tr><td>${EVN[e]}</td>${JOINTS.map(j=>`<td>${cell(j.k,stats(used.map(c=>A.ang[c[e]][j.k])))}<br><small>${REF[e][j.k]?'目安 '+REF[e][j.k]:'—'}</small></td>`).join('')}</tr>`;
+    h+=`</tbody></table><div class="muted" style="margin-top:4px">採用 ${used.length} 周期／検出 ${A.cycles.length} 周期。目安はPerry（2010）。比較時の注意は下部の「参考数値」を参照。</div>`;
+  }else{
+    h=`<table><thead><tr><th>平均±SD<br><small>（判定幅）</small></th>${FJ.map(j=>`<th>${j.n}</th>`).join('')}</tr></thead><tbody>`;
+    for(const side of['R','L']){const it=used.filter(c=>c.key==='m'+side);
+      h+=`<tr><td>${EVN['m'+side]}<br><small>n=${it.length}</small></td>${FJ.map(j=>`<td>${cell(j.k,stats(it.map(c=>froVal(A,c)[j.k])))}<br><small>${rangeTxt(j.k,RANGE.mid[j.k])}</small></td>`).join('')}</tr>`;}
+    h+=`</tbody></table>`;
+  }
+  $('summary').innerHTML=h;
+  $('findings').innerHTML=findingsHtml(findingsOf(s),false)+(A.type==='sag'?phaseHtml(s,A.side):'')+'<p class="muted" style="margin:0">AIによる2D推定値にアプリ独自の判定幅を当てはめた参考所見です。診断ではありません。動画で必ず確認してください。過半数で該当したものだけを表示しています。</p>';
+  const t=i=>tReal(s,A.samples[i].f).toFixed(3);
+  if(A.type==='sag'){
+    $('evTitle').textContent='周期ごとのイベント';
+    $('cycles').innerHTML=A.cycles.map((c,ci)=>`<div class="cycle${c.use?'':' off'}">
+      <div class="cycle-head">周期 ${ci+1}<label><input type="checkbox" data-use="${ci}" ${c.use?'checked':''}>採用</label></div>
+      <div class="evs">${['ic','peak','to'].map(e=>{const a=A.ang[c[e]],sel=s.selEv&&s.selEv.c===ci&&s.selEv.e===e;
+        return`<button class="ev${sel?' sel':''}" data-c="${ci}" data-e="${e}"><b>${EVN[e]}${A.lowVis(c[e])?' <span class="q">⚠</span>':''}</b>${t(c[e])} s<br>${JOINTS.map(j=>j.s+' '+clin(j.k,a[j.k])).join('<br>')}</button>`;}).join('')}</div></div>`).join('');
+  }else{
+    $('evTitle').textContent='立脚中期ごとの値';
+    $('cycles').innerHTML=A.cycles.map((c,ci)=>{const v=froVal(A,c),sel=s.selEv&&s.selEv.c===ci;
+      return`<div class="cycle${c.use?'':' off'}"><div class="cycle-head">${EVN[c.key]} ${t(c.i)} s<label><input type="checkbox" data-use="${ci}" ${c.use?'checked':''}>採用</label></div>
+      <div class="evs one"><button class="ev${sel?' sel':''}" data-c="${ci}" data-e="i"><b>${EVN[c.key]}${A.lowVis(c.i)?' <span class="q">⚠</span>':''}</b>${FJ.map(j=>j.n+' '+clin(j.k,v[j.k])).join('　')}</button></div></div>`;}).join('');
+  }
+  $('cycles').querySelectorAll('[data-use]').forEach(el=>el.onchange=()=>{A.cycles[+el.dataset.use].use=el.checked;renderSlotResults();renderReport();});
+  $('cycles').querySelectorAll('.ev').forEach(el=>el.onclick=()=>{s.selEv={c:+el.dataset.c,e:el.dataset.e};renderSlotResults();goSel();});
+  $('adjBar').hidden=!s.selEv;
+  if(s.selEv){const c=A.cycles[s.selEv.c];$('adjLbl').textContent=A.type==='sag'?`周期${s.selEv.c+1}・${EVN[s.selEv.e]}を修正`:`${EVN[c.key]}（${s.selEv.c+1}番目）を修正`;}
+  $('chartNote').textContent=A.type==='sag'?'上向きが前傾・屈曲・背屈、下向きが後傾・伸展・底屈。縦線は 実線＝初期接地、点線＝頭部最高点、破線＝足尖離地。':'骨盤は＋＝右が低い、体幹は＋＝右へ傾く、膝は＋＝外反。縦線は 赤＝右立脚中期、青＝左立脚中期。';
+  drawChart(s);
+}
+function goSel(){const s=sl(),c=s.A.cycles[s.selEv.c];show(s.A.samples[c[s.selEv.e]].f);$('viewerBox').scrollIntoView({behavior:'smooth',block:'start'});}
+document.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>{
+  const s=sl();if(!s.selEv||!s.A)return;const A=s.A,c=A.cycles[s.selEv.c];
+  c[s.selEv.e]=Math.max(0,Math.min(A.samples.length-1,c[s.selEv.e]+(+b.dataset.adj)));
+  if(A.type==='fro')A.ev=A.cycles.map(A.evAt);
+  renderSlotResults();renderReport();show(A.samples[c[s.selEv.e]].f);
+});
+
+/* ---------- グラフ ---------- */
+function niceTicks(a,b,n){const r=b-a;let s=Math.pow(10,Math.floor(Math.log10(r/n)));for(const m of[1,2,5,10]){if(r/(s*m)<=n){s*=m;break;}}const t=[];for(let v=Math.ceil(a/s)*s;v<=b+1e-9;v+=s)t.push(+v.toFixed(6));return t;}
+function drawChart(s){
+  const A=s.A,cv=$('chart'),dpr=devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W||!A)return;
+  cv.width=W*dpr;cv.height=H*dpr;const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,W,H);
+  const tt=A.samples.map(o=>o.f/s.capFps);
+  const lines=A.type==='sag'
+    ?JOINTS.map(j=>({n:j.n,c:css(j.c),y:A.ang.map(a=>a[j.k])}))
+    :[{n:'骨盤',c:css('--c-hip'),y:A.fr.map(f=>f.obliq)},{n:'体幹',c:css('--c-trunk'),y:A.fr.map(f=>f.tlat)},{n:'右膝',c:css('--c-R'),y:A.fr.map(f=>f.kneeR),dash:[5,3]},{n:'左膝',c:css('--c-L'),y:A.fr.map(f=>f.kneeL),dash:[5,3]}];
+  const vals=[];lines.forEach(l=>l.y.forEach(v=>v!=null&&isFinite(v)&&vals.push(v)));if(!vals.length)return;
+  let y0=Math.min(...vals),y1=Math.max(...vals);const pd=(y1-y0)*0.06+1;y0-=pd;y1+=pd;
+  const L=36,R=8,T=26,B=24,pw=W-L-R,ph=H-T-B,x0=tt[0],x1=tt[tt.length-1]||x0+1;
+  const sx=x=>L+(x-x0)/((x1-x0)||1)*pw,sy=y=>T+(y1-y)/(y1-y0)*ph;
+  c.font='11px '+css('--font');c.lineWidth=1;
+  niceTicks(y0,y1,5).forEach(v=>{c.strokeStyle=css('--line');c.beginPath();c.moveTo(L,sy(v));c.lineTo(W-R,sy(v));c.stroke();c.fillStyle=css('--muted');c.textAlign='right';c.fillText(v,L-4,sy(v)+4);});
+  niceTicks(x0,x1,5).forEach(v=>{c.fillStyle=css('--muted');c.textAlign='center';c.fillText(v+'s',sx(v),H-6);});
+  A.cycles.filter(cy=>cy.use).forEach(cy=>{
+    const vl=A.type==='sag'?[['ic',[]],['peak',[2,3]],['to',[6,4]]].map(([e,d])=>({i:cy[e],d,col:css('--muted')})):[{i:cy.i,d:[],col:css(cy.key==='mR'?'--c-R':'--c-L')}];
+    vl.forEach(v=>{c.setLineDash(v.d);c.strokeStyle=v.col;c.beginPath();c.moveTo(sx(tt[v.i]),T);c.lineTo(sx(tt[v.i]),T+ph);c.stroke();});
+  });
+  lines.forEach(l=>{c.setLineDash(l.dash||[]);c.strokeStyle=l.c;c.lineWidth=1.8;c.beginPath();let pen=false;
+    l.y.forEach((v,i)=>{if(v==null||!isFinite(v)){pen=false;return;}const X=sx(tt[i]),Y=sy(v);if(pen)c.lineTo(X,Y);else{c.moveTo(X,Y);pen=true;}});c.stroke();});
+  c.setLineDash([]);let lx=L;c.textAlign='left';
+  lines.forEach(l=>{c.fillStyle=l.c;c.fillRect(lx,10,10,3);lx+=13;c.fillStyle=css('--fg');c.fillText(l.n,lx,15);lx+=c.measureText(l.n).width+10;});
+}
+window.addEventListener('resize',()=>{if(sl().A)drawChart(sl());});
+
+/* ---------- 総合レポート ---------- */
+function sagMeans(s){const A=s.A,used=A.cycles.filter(c=>c.use),o={};for(const e of['ic','peak','to']){o[e]={};for(const j of JOINTS)o[e][j.k]=stats(used.map(c=>A.ang[c[e]][j.k]));}return o;}
+function collectAll(){
+  const all=[];
+  SLOTS.forEach(d=>{const s=S[d.id];if(s.A)findingsOf(s).forEach(f=>all.push({...f,src:s.n}));});
+  const Ls=S.left.A?sagMeans(S.left):null,Rs=S.right.A?sagMeans(S.right):null,lr=[];
+  if(Ls&&Rs)for(const e of['ic','peak','to'])for(const j of JOINTS){const l=Ls[e][j.k],r=Rs[e][j.k];if(!l||!r)continue;
+    const d=r.m-l.m;lr.push({e,k:j.k,l:l.m,r:r.m,d});
+    if(Math.abs(d)>LR_DIFF)all.push({type:'差',side:null,src:'左右側面',label:`${EVN[e]}・${j.n}の左右差`,val:`右 ${clin(j.k,r.m)}／左 ${clin(j.k,l.m)}`,cnt:`差 ${Math.abs(d).toFixed(1)}°`});}
+  for(const v of['front','back']){const s=S[v];if(!s.A)continue;const used=s.A.cycles.filter(c=>c.use);
+    for(const j of FJ){const r=stats(used.filter(c=>c.key==='mR').map(c=>froVal(s.A,c)[j.k])),l=stats(used.filter(c=>c.key==='mL').map(c=>froVal(s.A,c)[j.k]));
+      if(r&&l&&Math.abs(r.m-l.m)>LR_DIFF)all.push({type:'差',side:null,src:s.n,label:`立脚中期・${j.n}の左右差`,val:`右 ${clin(j.k,r.m)}／左 ${clin(j.k,l.m)}`,cnt:`差 ${Math.abs(r.m-l.m).toFixed(1)}°`});}}
+  return{all,lr};
+}
+function renderReport(){
+  const done=SLOTS.filter(d=>S[d.id].A);
+  $('sumCard').hidden=!done.length;if(!done.length)return;
+  const{all,lr}=collectAll();
+  let h=`<div class="muted">解析済み：${done.map(d=>d.n).join('・')}${done.length<4?`　未解析：${SLOTS.filter(d=>!S[d.id].A).map(d=>d.n).join('・')}`:''}</div>`;
+  if(lr.length){
+    h+=`<h2>矢状面の左右比較</h2><div class="tablewrap"><table><thead><tr><th>場面・関節</th><th>右</th><th>左</th><th>差</th></tr></thead><tbody>${lr.map(x=>{const big=Math.abs(x.d)>LR_DIFF;
+      return`<tr><td>${EVN[x.e]}・${JK[x.k].n}</td><td>${clin(x.k,x.r)}</td><td>${clin(x.k,x.l)}</td><td class="${big?'diff':''}">${Math.abs(x.d).toFixed(1)}°</td></tr>`;}).join('')}</tbody></table></div><div class="muted">差が${LR_DIFF}°を超える項目を強調表示しています。</div>`;
+  }else if(S.left.A||S.right.A)h+='<div class="muted">左右の側面動画が両方そろうと、左右比較を表示します。</div>';
+  for(const v of['front','back']){const s=S[v];if(!s.A)continue;const used=s.A.cycles.filter(c=>c.use);
+    h+=`<h2>前額面（${s.n}）</h2><div class="tablewrap"><table><thead><tr><th>項目</th><th>右立脚中期</th><th>左立脚中期</th></tr></thead><tbody>${FJ.map(j=>{const r=stats(used.filter(c=>c.key==='mR').map(c=>froVal(s.A,c)[j.k])),l=stats(used.filter(c=>c.key==='mL').map(c=>froVal(s.A,c)[j.k]));
+      return`<tr><td>${j.n}</td><td>${r?clin(j.k,r.m):'—'}</td><td>${l?clin(j.k,l.m):'—'}</td></tr>`;}).join('')}</tbody></table></div>`;}
+  const prL=S.left.A?phaseReport(S.left):null,prR=S.right.A?phaseReport(S.right):null;
+  if(prL||prR){
+    const cellP=pr=>!pr?'<span class="muted">動画なし</span>':!pr.N?'<span class="muted">検出できず</span>':pr.probs.length?pr.probs.map(x=>x.n).join('<br>'):'問題なし';
+    h+=`<h2>相ごとの問題（左右）</h2><div class="tablewrap"><table><thead><tr><th>相</th><th style="text-align:left">右</th><th style="text-align:left">左</th></tr></thead><tbody>${PHASES.map((p,i)=>`<tr><td>${p.n}</td><td style="text-align:left;white-space:normal">${cellP(prR&&prR.phases[i])}</td><td style="text-align:left;white-space:normal">${cellP(prL&&prL.phases[i])}</td></tr>`).join('')}<tr><td>周期全体</td><td style="text-align:left;white-space:normal">${prR?(prR.gait.probs.map(x=>x.n).join('<br>')||'問題なし'):'<span class="muted">動画なし</span>'}</td><td style="text-align:left;white-space:normal">${prL?(prL.gait.probs.map(x=>x.n).join('<br>')||'問題なし'):'<span class="muted">動画なし</span>'}</td></tr></tbody></table></div>`;
+    if(prL&&prR){const row=(lab,a,b,u)=>`<tr><td>${lab}</td><td>${a?a.m.toFixed(u==='s'?2:0)+(u==='s'?' s':'%'):'—'}</td><td>${b?b.m.toFixed(u==='s'?2:0)+(u==='s'?' s':'%'):'—'}</td></tr>`;
+      h+=`<div class="tablewrap"><table><thead><tr><th>時間因子</th><th>右</th><th>左</th></tr></thead><tbody>${row('立脚期',prR.gait.stance,prL.gait.stance,'%')}${row('両脚支持期',prR.gait.ds,prL.gait.ds,'%')}${row('1周期',prR.gait.cyc,prL.gait.cyc,'s')}${PHASES.filter(p=>p.k!=='IC').map((p,i)=>row(p.n,prR.phases[i+1].pct,prL.phases[i+1].pct,'%')).join('')}</tbody></table></div>`;}
+  }
+  const diffs=all.filter(f=>f.type==='差');
+  h+=findingsHtml(all.filter(f=>f.type!=='差'),true);
+  h+='<h2 style="margin-top:6px">左右差</h2>'+(diffs.length?`<div style="display:flex;flex-direction:column;gap:6px">${diffs.map(x=>`<div class="pat"><span class="src">${x.src}</span><b>${x.label}</b><span>${x.val}</span><small>${x.cnt}</small></div>`).join('')}</div>`:`<p class="muted" style="margin:0">${LR_DIFF}°を超える左右差はありません。</p>`);
+  h+='<p class="muted" style="margin:0">AIによる2D推定値にアプリ独自の判定幅を当てはめた参考所見です。診断ではありません。各動画で骨格とイベントの位置を確認してください。</p>';
+  $('report').innerHTML=h;
+}
+
+/* ---------- 出力 ---------- */
+const qv=v=>{if(v==null||(typeof v==='number'&&!isFinite(v)))return'';const s=String(v);return/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+const toCsv=rows=>rows.map(r=>r.map(qv).join(',')).join('\r\n');
+const r3=v=>v==null?null:+v.toFixed(3);
+function download(name,data){
+  const b=data instanceof Blob?data:new Blob(['﻿'+data],{type:'text/csv'});const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+}
+function allRows(){
+  const rows=[['Gait Tester 総合結果',new Date().toLocaleString('ja-JP')],['AIモデル',$('model').value],['平滑化Hz',+$('fc').value||'なし'],['符号','体幹:前傾+ 股・膝:屈曲+ 足関節:背屈+ ／ 骨盤:遊脚側下制+ 体幹側屈:立脚側+ 膝:外反+'],[]];
+  SLOTS.forEach(d=>{const s=S[d.id];if(!s.A)return;const A=s.A;
+    rows.push([`■ ${s.n}`,s.name,`撮影fps ${s.capFps}`,`AI ${s.engine||'MediaPipe（端末内）'}`]);
+    if(A.type==='sag'){
+      rows.push(['周期','採用','イベント','時刻_s','体幹前傾','股関節屈曲','膝関節屈曲','足関節背屈','低信頼度','体幹_表記','股関節_表記','膝関節_表記','足関節_表記']);
+      A.cycles.forEach((c,ci)=>['ic','peak','to'].forEach(e=>{const i=c[e],a=A.ang[i];
+        rows.push([ci+1,c.use?1:0,EVN[e],r3(tReal(s,A.samples[i].f)),r3(a.trunk),r3(a.hip),r3(a.knee),r3(a.ankle),A.lowVis(i)?1:0,...JOINTS.map(j=>clin(j.k,a[j.k]))]);}));
+    }else{
+      rows.push(['番号','採用','イベント','時刻_s','骨盤_遊脚側下制+','体幹側屈_立脚側+','立脚側膝_外反+','低信頼度','骨盤_表記','体幹側屈_表記','膝_表記']);
+      A.cycles.forEach((c,ci)=>{const v=froVal(A,c);rows.push([ci+1,c.use?1:0,EVN[c.key],r3(tReal(s,A.samples[c.i].f)),r3(v.pelvis),r3(v.tlat),r3(v.fknee),A.lowVis(c.i)?1:0,...FJ.map(j=>clin(j.k,v[j.k]))]);});
+    }
+    rows.push([]);
+  });
+  for(const v of['left','right']){const pr=S[v].A?phaseReport(S[v]):null;if(!pr)continue;
+    rows.push([`■ ${S[v].n}：相ごとの結果`],['相','検出周期','平均時間_s','平均%GC','目安%GC','問題']);
+    pr.phases.forEach(x=>rows.push([x.p.n,x.N,x.dur?r3(x.dur.m):null,x.pct?r3(x.pct.m):null,`${x.p.ref[0]}-${x.p.ref[1]}`,x.N?(x.probs.map(p=>`${p.n}(${p.hit}/${p.N})`).join(' / ')||'問題なし'):'検出できず']));
+    rows.push(['立脚期%',pr.gait.stance?r3(pr.gait.stance.m):null,'両脚支持期%',pr.gait.ds?r3(pr.gait.ds.m):null,'周期全体の問題',pr.gait.probs.map(p=>p.n).join(' / ')||'問題なし'],[]);
+    rows.push([`${S[v].n}：周期ごとの相の区切り（時刻_s）`],['周期','初期接地','反対側離地','踵離地','反対側接地','足尖離地','足部並列','下腿垂直','次の初期接地']);
+    S[v].A.cycles.forEach((c,ci)=>{const T=i=>i==null?null:r3(tReal(S[v],S[v].A.samples[i].f));rows.push([ci+1,T(c.ic),T(c.ph.oTO),T(c.ph.HO),T(c.ph.oIC),T(c.to),T(c.ph.FA),T(c.ph.TV),T(c.nic)]);});
+    rows.push([]);}
+  const{all,lr}=collectAll();
+  if(lr.length){rows.push(['■ 矢状面の左右比較'],['場面','関節','右','左','差']);lr.forEach(x=>rows.push([EVN[x.e],JK[x.k].n,clin(x.k,x.r),clin(x.k,x.l),r3(Math.abs(x.d))]));rows.push([]);}
+  rows.push(['■ 所見一覧'],['種類','動画','側','内容','値・基準','該当']);
+  all.forEach(f=>rows.push([f.type==='値'?'異常値':f.type==='型'?'異常パターン候補':'左右差',f.src,f.side?SN[f.side]:'',f.label,f.type==='型'?f.desc:f.type==='値'?`${f.val}（判定幅 ${f.ref}）`:f.val,f.cnt]));
+  return rows;
+}
+$('xAll').onclick=()=>download(`GaitTester_総合_${stamp()}.csv`,toCsv(allRows()));
+$('xCopy').onclick=async()=>{
+  const txt=allRows().map(r=>r.map(v=>v??'').join('\t')).join('\n');
+  try{await navigator.clipboard.writeText(txt);$('xCopy').textContent='コピーしました';setTimeout(()=>$('xCopy').textContent='総合結果をコピー',1500);}
+  catch(e){const ta=$('copyArea');ta.hidden=false;ta.value=txt;ta.select();}
+};
+$('xFrame').onclick=()=>{
+  const s=sl(),A=s.A;if(!A)return;const rows=[[s.n,s.name],[]];
+  if(A.type==='sag'){rows.push(['frame','時刻_s','体幹前傾','股関節屈曲','膝関節屈曲','足関節背屈']);A.samples.forEach((o,i)=>{const a=A.ang[i];rows.push([o.f,r3(tReal(s,o.f)),r3(a.trunk),r3(a.hip),r3(a.knee),r3(a.ankle)]);});}
+  else{rows.push(['frame','時刻_s','骨盤_右が低い+','体幹側屈_右へ+','右膝FPPA_外反+','左膝FPPA_外反+']);A.samples.forEach((o,i)=>{const f=A.fr[i];rows.push([o.f,r3(tReal(s,o.f)),r3(f.obliq),r3(f.tlat),r3(f.kneeR),r3(f.kneeL)]);});}
+  download(`${(s.name||s.n).replace(/\.[^.]+$/,'')}_frames.csv`,toCsv(rows));
+};
+
+/* ---------- 判定基準の表示 ---------- */
+function renderCriteria(){
+  $('criteria').innerHTML=`<p><b>矢状面の判定幅（アプリ独自）</b></p><div class="tablewrap"><table><thead><tr><th>場面</th>${JOINTS.map(j=>`<th>${j.n}</th>`).join('')}</tr></thead><tbody>${['ic','peak','to'].map(e=>`<tr><td>${EVN[e]}</td>${JOINTS.map(j=>`<td><small>${rangeTxt(j.k,RANGE[e][j.k])}</small></td>`).join('')}</tr>`).join('')}</tbody></table></div>
+  <p><b>前額面の判定幅（立脚中期・アプリ独自）</b></p><div class="tablewrap"><table><thead><tr>${FJ.map(j=>`<th style="text-align:left">${j.n}</th>`).join('')}</tr></thead><tbody><tr>${FJ.map(j=>`<td style="text-align:left"><small>${rangeTxt(j.k,RANGE.mid[j.k])}</small></td>`).join('')}</tr></tbody></table></div>
+  <p><b>異常パターンの判定基準</b></p><ul>${[...PATTERNS,...FPATTERNS].map(p=>`<li>${p.n}：${p.d}</li>`).join('')}<li>左右差：左右の平均の差が${LR_DIFF}°を超える</li></ul>
+  <p><b>相ごとの判定基準（側面動画・8相）</b></p><ul>${PCHECK.map(k=>`<li>${PHK[k.ph].n}：${k.n}（${k.d}）</li>`).join('')}<li>${PHK.TSt.n}：踵離地の遅延・欠如（踵の上昇を検出できない）</li>${GCHECK.map(k=>`<li>周期全体：${k.n}（${k.d}）</li>`).join('')}</ul>
+  <p class="muted">判定幅は目安値に2D・AI計測の誤差（数度〜10°程度）を見込んで設定したもので、妥当性は検証されていません。研究では自施設の健常者データで見直してください。8相の区切りは、反対側の接地・離地（Zeni法）、踵の上昇、足首の追い越し、下腿の垂直位から自動で推定しています。</p>`;
+}
+
+/* ---------- PWA ---------- */
+let deferred=null;
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+if(standalone)$('bInstall').hidden=true;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;});
+window.addEventListener('appinstalled',()=>{$('bInstall').hidden=true;$('installHelp').hidden=true;});
+$('bInstall').onclick=async()=>{
+  if(deferred){deferred.prompt();const r=await deferred.userChoice.catch(()=>null);deferred=null;if(r&&r.outcome==='accepted')$('bInstall').hidden=true;return;}
+  const h=$('installHelp');h.hidden=false;
+  if(location.protocol!=='https:'&&location.hostname!=='localhost'&&location.hostname!=='127.0.0.1')h.textContent='このままではインストールできません。サーバーアプリ経由で http://localhost:〜 のURLをChromeで開いてください。';
+  else h.textContent='Chrome右上の「︙」→「ホーム画面に追加」→「インストール」を選んでください。表示されない場合は、ページを一度閉じて数十秒後に開き直してください。';
+};
+async function checkOffline(){
+  const el=$('offline');
+  if(!('caches' in window)){el.textContent='この環境ではオフライン保存を使えません';return;}
+  try{const k=$('model').value,ok=await caches.match(SOURCES[0].model(k))&&await caches.match(SOURCES[0].lib);
+    el.textContent=ok?'このAIモデルはオフラインで使えます':'未保存：ネット接続中に「保存」を押してください';$('bCache').hidden=!!ok;}catch(e){el.textContent='';}
+}
+$('model').addEventListener('change',checkOffline);
+$('bCache').onclick=async()=>{
+  const el=$('offline');$('bCache').disabled=true;
+  try{await getLandmarker($('model').value,t=>el.textContent=t);el.textContent='保存しました';}
+  catch(e){el.textContent='保存できませんでした。インターネット接続を確認してください';}
+  $('bCache').disabled=false;setTimeout(checkOffline,800);
+};
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(()=>navigator.serviceWorker.ready).then(()=>setTimeout(checkOffline,1500)).catch(()=>{$('offline').textContent='オフライン機能を有効にできませんでした';});
+}else $('offline').textContent='この環境ではオフライン保存を使えません';
+
+renderCriteria();selectSlot('left');
+window.__gait={S,compute,selectSlot,renderReport};
+</script>
+</body>
+</html>
