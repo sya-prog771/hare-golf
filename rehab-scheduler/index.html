@@ -206,7 +206,7 @@ function defaultState(){
     settings:defaultSettings(),therapists:s.therapists,patients:s.patients,
     patterns:builtinPatterns(),curPattern:'平日標準',
     gen:{start:today,days:1,wdPattern:{0:'日祝（最小体制）',6:'土曜（短縮）'},holidays:'',holidayPattern:'日祝（最小体制）'},
-    result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,thShowAbsent:false,mq:'',mWard:'',tmDisc:''},sample:true
+    result:null,ui:{tab:'gen',day:'',thDisc:'',ptWard:'',ptQ:'',ptOnlyShort:false,ptView:'grid',thShowAbsent:false,mq:'',mWard:'',tmDisc:''},sample:true
   };
 }
 let state;
@@ -550,11 +550,11 @@ function vTh(){
   <div class="scroll"><table class="sg" id="sg" style="--rh:${rowH(F)}px"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
 }
 function rowH(F){return Math.max(8,Math.round(36/F.k))}
-function sesHtml(s,day,rows){
+function sesHtml(s,day,rows,mode){
   const p=ptById.get(s.p)||{name:s.p};const F=frame(day.date,day.S);
   const t0=F.times[s.s]!=null?F.times[s.s]:F.t0;
   const tanto=p['t'+s.disc];const alt=tanto&&tanto!==s.t&&day.working.includes(tanto);
-  return`<span class="ses ${s.disc} ${s.locked?'lock':''} ${alt?'alt':''}" style="height:${(rows||F.k)*rowH(F)-5}px" draggable="true" data-sid="${s.id}" title="${esc(p.name)} ${esc(p.ward||'')}-${esc(p.room||'')}\n${fmt(t0)}-${fmt(t0+s.len*F.u)} ${s.disc} ${s.len}単位${s.locked?' 固定':''}${alt?'\n担当: '+esc((thById.get(tanto)||{}).name||tanto):''}"><span class="pn">${s.locked?'🔒':''}${esc(p.name)}</span><span class="pr">${esc(p.ward||'')} ${esc(p.room||'')}</span>${(rows||F.k)*rowH(F)>=60?`<span class="pr">${fmt(t0)}〜 ${s.len}単位</span>`:''}</span>`;
+  return`<span class="ses ${s.disc} ${s.locked?'lock':''} ${alt?'alt':''}" style="height:${(rows||F.k)*rowH(F)-5}px" draggable="true" data-sid="${s.id}" title="${esc(p.name)} ${esc(p.ward||'')}-${esc(p.room||'')}\n${fmt(t0)}-${fmt(t0+s.len*F.u)} ${s.disc} ${s.len}単位${s.locked?' 固定':''}${alt?'\n担当: '+esc((thById.get(tanto)||{}).name||tanto):''}">${mode==='pt'?`<span class="pn">${s.locked?'🔒':''}${s.disc} ${esc((thById.get(s.t)||{}).name||s.t)}</span><span class="pr">${fmt(t0)}-${fmt(t0+s.len*F.u)}</span>`:`<span class="pn">${s.locked?'🔒':''}${esc(p.name)}</span><span class="pr">${esc(p.ward||'')} ${esc(p.room||'')}</span>`}${(rows||F.k)*rowH(F)>=60?`<span class="pr">${mode==='pt'?s.len+'単位':fmt(t0)+'〜 '+s.len+'単位'}</span>`:''}</span>`;
 }
 
 function vPt(){
@@ -565,6 +565,7 @@ function vPt(){
   const byP=new Map();day.sessions.forEach(s=>{if(!byP.has(s.p))byP.set(s.p,[]);byP.get(s.p).push(s)});
   let list=state.patients.filter(p=>(!w||p.ward===w)&&(!q||(p.name+p.id+p.room).includes(q)));
   list=list.slice().sort((a,b)=>String(a.ward).localeCompare(String(b.ward))||String(a.room).localeCompare(String(b.room),undefined,{numeric:true})||a.id.localeCompare(b.id));
+  if(state.ui.ptView!=='list')return vPtGrid(day,F,list,am,byP,wards,q,w);
   let html='',lastW=null,cnt=0;
   for(const p of list){
     const req=day.req[p.id];const ex=day.excluded&&day.excluded[p.id];
@@ -581,11 +582,60 @@ function vPt(){
     <label class="f">病棟<select data-ui="ptWard"><option value="">すべて</option>${wards.map(x=>`<option ${x===w?'selected':''}>${esc(x)}</option>`).join('')}</select></label>
     <label class="f">検索（氏名・ID・部屋）<input data-ui="ptQ" value="${esc(q)}"></label>
     <label class="row small"><input type="checkbox" data-ui="ptOnlyShort" ${state.ui.ptOnlyShort?'checked':''}> 未充足のみ</label>
+    ${ptViewSel()}
     <div style="margin-left:auto" class="row"><button class="b" data-act="exportPtDay">この日の患者別CSV</button><button class="b" data-act="print">印刷（病棟配布用）</button></div></div></div>
   <div class="card"><h2>${mdw(day.date)} 患者別 予定（${cnt}名）</h2>
   <div class="scroll"><table class="t"><thead><tr><th>部屋</th><th>氏名</th><th>単位(実施/予定)</th><th>予定</th><th>状態</th></tr></thead><tbody>${html}</tbody></table></div></div>`;
 }
 
+function ptViewSel(){return`<label class="f">表示<select data-ui="ptView"><option value="grid" ${state.ui.ptView!=='list'?'selected':''}>時間割（縦＝時刻）</option><option value="list" ${state.ui.ptView==='list'?'selected':''}>一覧</option></select></label>`}
+function vPtGrid(day,F,list,am,byP,wards,q,w){
+  const cols=[];
+  for(const p of list){
+    const req=day.req[p.id],ex=day.excluded&&day.excluded[p.id];
+    let short=false,rq=0,as=0;if(req)DISC.forEach(d=>{const r=req[d]||0,a=Math.min(r,am[p.id+'|'+d]||0);rq+=r;as+=a;if(r>a)short=true});
+    if(state.ui.ptOnlyShort&&!short)continue;
+    const ss=byP.get(p.id)||[];
+    cols.push({p,ex,short,rq,as,av:ptAvail(p,F),startMap:new Map(ss.map(x=>[x.s,x])),until:0});
+  }
+  const head=`<tr><th class="tm">時刻</th>${cols.map(c=>`<th class="${c.ex?'absent':''}" title="${esc(c.p.name)} ${esc(c.p.id)}"><div class="muted">${esc(c.p.ward)}-${esc(c.p.room)}</div><div class="thn">${esc(c.p.name)}</div><div class="${c.short?'ng':'muted'}">${c.ex?esc(c.ex):c.as+'/'+c.rq+'単位'}</div></th>`).join('')}</tr>`;
+  let body='';
+  for(let i=0;i<F.n;i++){
+    let cells='';
+    for(const c of cols){
+      if(c.until>i)continue;
+      const s=c.startMap.get(i);
+      if(s){const len=Math.min(s.len*F.k,F.n-i);c.until=i+len;cells+=`<td rowspan="${len}">${sesHtml(s,day,len,'pt')}</td>`;continue}
+      const cls=F.isBreak[i]?'brk':(!c.ex&&c.av[i]?'free':'na');
+      cells+=`<td class="${cls}" data-drop="1" data-pp="${esc(c.p.id)}" data-s="${i}"></td>`;
+    }
+    const lab=(F.times[i]-F.t0)%F.u===0||i===0,span=Math.min(F.k-((F.times[i]-F.t0)%F.u)/F.st,F.n-i);
+    const tmc=lab?`<th class="tm ${F.isBreak[i]?'brk':''}" rowspan="${span}">${fmt(F.times[i])}</th>`:'';
+    body+=`<tr class="${(i+1)%F.k&&i+1<F.n?'sub':''}">${tmc}${cells}</tr>`;
+  }
+  const ids=new Set(cols.map(c=>c.p.id));
+  const un=unassignedList(day).filter(u=>ids.has(u.p));
+  return`<div class="card noprint"><div class="row">${daySelect()}
+    <label class="f">病棟<select data-ui="ptWard"><option value="">すべて</option>${wards.map(x=>`<option ${x===w?'selected':''}>${esc(x)}</option>`).join('')}</select></label>
+    <label class="f">検索（氏名・ID・部屋）<input data-ui="ptQ" value="${esc(q)}"></label>
+    <label class="row small"><input type="checkbox" data-ui="ptOnlyShort" ${state.ui.ptOnlyShort?'checked':''}> 未充足のみ</label>
+    ${ptViewSel()}
+    <div style="margin-left:auto" class="row"><button class="b" data-act="exportPtGrid">この表をCSV</button><button class="b" data-act="print">印刷</button></div></div>
+    <p class="help legend"><span>■予定を上下にドラッグ＝時刻変更（療法士はそのまま）</span><span>■未割当を空き枠へドラッグ＝空いている療法士を自動で選んで配置（担当優先）</span><span>灰色＝NG時間/休憩</span></p>
+    <div><b>未割当 ${un.length}件</b> <span class="muted small">（表示中の患者分）</span>
+    <div class="unbox" data-unbox="1">${un.map((u,i)=>{const p=ptById.get(u.p)||{};return`<span class="chip ${u.d} uitem" draggable="true" data-un="${i}" data-p="${esc(u.p)}" data-d="${u.d}" data-len="${u.miss}" title="${esc(u.reason)}">${esc(p.name||u.p)} ${esc(p.ward||'')} ${u.d}×${u.miss}</span>`}).join('')||'<span class="muted small">なし</span>'}</div></div></div>
+  <div class="card"><h2>${mdw(day.date)} 患者別 時間割（${cols.length}名）</h2>
+  <div class="scroll"><table class="sg" style="--rh:${rowH(F)}px"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
+}
+function pickTherapist(day,p,d,s,len){
+  const pt=ptById.get(p)||{},tanto=pt['t'+d],load={};
+  day.sessions.forEach(x=>load[x.t]=(load[x.t]||0)+x.len);
+  const c=state.therapists.filter(t=>t.disc===d&&day.working.includes(t.id)).map(t=>{const r=checkPlace(day,{p,t:t.id,disc:d,s,len},null);return{t,r}}).filter(x=>!x.r.errs.length&&!x.r.warns.length);
+  const lim=t=>(+t.max>0?+t.max:+day.S.thMax)||999;
+  const ok=c.filter(x=>(load[x.t.id]||0)+len<=lim(x.t));
+  ok.sort((a,b)=>(b.t.id===tanto)-(a.t.id===tanto)||(load[a.t.id]||0)-(load[b.t.id]||0));
+  return ok.length?ok[0].t.id:null;
+}
 function vUn(){
   const day=curDay();if(!day)return noResult();
   const un=unassignedList(day);
@@ -813,6 +863,11 @@ const ACT={
     const grid=F.times.map((t,i)=>[fmt(t),...ths.map(()=>F.isBreak[i]?'休憩':'')]);
     ths.forEach((th,j)=>day.sessions.filter(s=>s.t===th.id).forEach(s=>{const p=ptById.get(s.p)||{};for(let k=0;k<s.len*F.k&&s.s+k<F.n;k++)grid[s.s+k][1+j]=`${p.name||s.p}(${p.ward||''}${p.room?'-'+p.room:''})`}));
     download(`療法士別予定_${day.date}.csv`,toCSV([['時刻',...ths.map(t=>`${t.disc} ${t.name}`)],...grid]))},
+  exportPtGrid(){const day=curDay(),F=frame(day.date,day.S),q=state.ui.ptQ.trim(),w=state.ui.ptWard;
+    const list=state.patients.filter(p=>(!w||p.ward===w)&&(!q||(p.name+p.id+p.room).includes(q))).sort((a,b)=>String(a.ward).localeCompare(String(b.ward))||String(a.room).localeCompare(String(b.room),undefined,{numeric:true})||a.id.localeCompare(b.id));
+    const grid=F.times.map((t,i)=>[fmt(t),...list.map(()=>F.isBreak[i]?'休憩':'')]);const ix=new Map(list.map((p,j)=>[p.id,j]));
+    day.sessions.forEach(s=>{const j=ix.get(s.p);if(j==null)return;for(let k=0;k<s.len*F.k&&s.s+k<F.n;k++)grid[s.s+k][1+j]=`${s.disc} ${(thById.get(s.t)||{}).name||s.t}`});
+    download(`患者別時間割_${day.date}${w?'_'+w:''}.csv`,toCSV([['時刻',...list.map(p=>`${p.ward}-${p.room} ${p.name}`)],...grid]))},
   exportPtDay(){const day=curDay(),F=frame(day.date,day.S);const rows=[['病棟','部屋','患者ID','氏名','開始','終了','職種','単位','療法士']];
     day.sessions.slice().sort((a,b)=>{const pa=ptById.get(a.p)||{},pb=ptById.get(b.p)||{};return String(pa.ward).localeCompare(String(pb.ward))||String(pa.room).localeCompare(String(pb.room),undefined,{numeric:true})||a.p.localeCompare(b.p)||a.s-b.s})
     .forEach(s=>{const p=ptById.get(s.p)||{},t=F.times[s.s];rows.push([p.ward,p.room,s.p,p.name,fmt(t),fmt(t+s.len*F.u),s.disc,s.len,(thById.get(s.t)||{}).name||s.t])});
@@ -887,6 +942,13 @@ document.addEventListener('drop',e=>{
   if(!drag)return;e.preventDefault();document.querySelectorAll('.over').forEach(x=>x.classList.remove('over'));
   const day=curDay();const c=e.target.closest('[data-drop]'),ub=e.target.closest('[data-unbox]');
   if(ub&&drag.sid!=null){day.sessions=day.sessions.filter(x=>x.id!==drag.sid);save();render()}
+  else if(c&&c.dataset.pp){
+    const pp=c.dataset.pp,s=+c.dataset.s;
+    if(drag.p!==pp)toast('別の患者の列には移せません（療法士別予定表で移動してください）');
+    else if(drag.sid!=null){const ses=day.sessions.find(x=>x.id===drag.sid);dropAt(day,drag,ses.t,s)}
+    else{let len=drag.len,t=null;while(len>=1&&!(t=pickTherapist(day,pp,drag.d,s,len)))len--;
+      if(!t)toast('この時間に空いている'+drag.d+'がいません');else dropAt(day,{...drag,len},t,s)}
+  }
   else if(c)dropAt(day,drag,c.dataset.t,+c.dataset.s);
   drag=null;
 });
