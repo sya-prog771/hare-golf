@@ -399,6 +399,95 @@ function ols(y,X){ // X は切片列を含む
   const my=mean(y), sse=sum(res.map(r=>r*r)), sst=sum(y.map(v=>(v-my)**2)), dfr=n-p, mse=sse/dfr;
   return {b,se:inv.map((r,i)=>Math.sqrt(mse*r[i])),fit,res,sse,sst,ssr:sst-sse,dfr,dfm:p-1,mse,r2:1-sse/sst,n,p};
 }
+/* ---- おまかせ検定・反復測定用の検定関数 ---- */
+function welchTest(a,b){
+  const n1=a.length,n2=b.length,m1=mean(a),m2=mean(b),v1=variance(a),v2=variance(b);
+  const se=Math.sqrt(v1/n1+v2/n2), t=(m1-m2)/se, df=(v1/n1+v2/n2)**2/((v1/n1)**2/(n1-1)+(v2/n2)**2/(n2-1));
+  return {t,df,se,diff:m1-m2,p:tP2(t,df),d:(m1-m2)/Math.sqrt(((n1-1)*v1+(n2-1)*v2)/(n1+n2-2))};
+}
+function mwTest(a,b){
+  const n1=a.length,n2=b.length,N=n1+n2,{r,ties}=rank([...a,...b]),U1=sum(r.slice(0,n1))-n1*(n1+1)/2,mu=n1*n2/2;
+  const sg=Math.sqrt(n1*n2/12*((N+1)-ties/(N*(N-1)))), z=sg>0?Math.max(0,Math.abs(U1-mu)-0.5)/sg:0;
+  return {U:Math.min(U1,n1*n2-U1),z,p:sg>0?2*normUpper(z):1,r:z/Math.sqrt(N)};
+}
+function kwTest(vs){
+  const all=vs.flat(),N=all.length,{r,ties}=rank(all); let off=0,Hs=0;
+  vs.forEach(g=>{ const s=sum(r.slice(off,off+g.length)); off+=g.length; Hs+=s*s/g.length; });
+  let H=12/(N*(N+1))*Hs-3*(N+1); const C=1-ties/(N**3-N); if(C>0) H/=C;
+  const df=vs.length-1; return {H,df,p:chi2Upper(H,df),eps:H/(N-1)};
+}
+function pairedTTest(x,y){
+  const d=x.map((v,i)=>y[i]-v),n=d.length,md=mean(d),sdd=sd(d),t=md/(sdd/Math.sqrt(n));
+  return {t,df:n-1,p:tP2(t,n-1),md,sdd,dz:md/sdd,n};
+}
+function wilcoxonTest(x,y){
+  const d=x.map((v,i)=>y[i]-v).filter(v=>v!==0),n=d.length; if(!n) return {Wp:0,Wm:0,z:0,p:1,r:0,n:0};
+  const {r,ties}=rank(d.map(Math.abs)); let Wp=0,Wm=0; d.forEach((v,i)=>{ if(v>0) Wp+=r[i]; else Wm+=r[i]; });
+  const mu=n*(n+1)/4,vr=n*(n+1)*(2*n+1)/24-ties/48,z=vr>0?Math.max(0,Math.abs(Wp-mu)-0.5)/Math.sqrt(vr):0;
+  return {Wp,Wm,z,p:vr>0?2*normUpper(z):1,r:z/Math.sqrt(n),n};
+}
+/* 反復測定の一元配置分散分析（Greenhouse–Geisser 補正つき）。Y は n 行 × k 列 */
+function rmAnova(Y){
+  const n=Y.length,k=Y[0].length,G=mean(Y.flat());
+  const mj=Array.from({length:k},(_,j)=>mean(Y.map(r=>r[j]))), mi=Y.map(r=>mean(r));
+  const SSc=n*sum(mj.map(m=>(m-G)**2)), SSs=k*sum(mi.map(m=>(m-G)**2)), SSt=sum(Y.flat().map(v=>(v-G)**2)), SSe=SSt-SSc-SSs;
+  const df1=k-1, df2=(k-1)*(n-1), F=(SSc/df1)/(SSe/df2);
+  const S=Array.from({length:k},(_,a)=>Array.from({length:k},(_,b)=>sum(Y.map(r=>(r[a]-mj[a])*(r[b]-mj[b])))/(n-1)));
+  const rm=S.map(r=>mean(r)), gm=mean(rm), Sc=S.map((r,a)=>r.map((v,b)=>v-rm[a]-rm[b]+gm));
+  let tr=0,sq=0; for(let a=0;a<k;a++){ tr+=Sc[a][a]; for(let b=0;b<k;b++) sq+=Sc[a][b]**2; }
+  const eps=Math.min(1,Math.max(1/(k-1),tr*tr/((k-1)*sq)));
+  return {n,k,SSc,SSs,SSe,SSt,df1,df2,F,p:fUpper(F,df1,df2),eps,pGG:fUpper(F,eps*df1,eps*df2),eta2p:SSc/(SSc+SSe),means:mj};
+}
+function friedmanTest(Y){
+  const n=Y.length,k=Y[0].length,R=new Array(k).fill(0); let T=0;
+  for(const row of Y){ const rk=rank(row); rk.r.forEach((v,j)=>R[j]+=v); T+=rk.ties; }
+  let Q=12/(n*k*(k+1))*sum(R.map(x=>x*x))-3*n*(k+1); const C=1-T/(n*k*(k*k-1)); if(C>0) Q/=C;
+  return {Q,df:k-1,p:chi2Upper(Q,k-1),W:Q/(n*(k-1)),meanRank:R.map(x=>x/n),n,k};
+}
+function completeRows(cols){ const cs=cols.map(numOf),Y=[]; for(let i=0;i<cs[0].length;i++) if(cs.every(c=>Number.isFinite(c[i]))) Y.push(cs.map(c=>c[i])); return Y; }
+/* 正規性の判定：Shapiro–Wilk で否定されない、または n≥30 で歪みが小さい（中心極限定理により t 検定などが頑健） */
+function normalCheck(v){
+  const sw=shapiro(v), d=describe(v,ALPHA()), swOk=!!sw&&sw.p>=ALPHA(), clt=!swOk&&v.length>=30&&Math.abs(d.skew)<1;
+  return {ok:swOk||clt,clt,sw,skew:d.skew,n:v.length};
+}
+const isOrdinal=v=>v.length>0&&v.every(Number.isInteger)&&new Set(v).size<=7;
+function crossTab(a,b){
+  const R=new Map(),C=new Map(),cell=new Map(); let N=0;
+  for(let i=0;i<a.length;i++){ if(isMissing(a[i])||isMissing(b[i])) continue; N++; R.set(a[i],(R.get(a[i])||0)+1); C.set(b[i],(C.get(b[i])||0)+1); const k=a[i]+'\u0000'+b[i]; cell.set(k,(cell.get(k)||0)+1); }
+  const rn=[...R.keys()].sort(natSort), cn=[...C.keys()].sort(natSort);
+  const O=rn.map(r=>cn.map(c=>cell.get(r+'\u0000'+c)||0)), E=rn.map(r=>cn.map(c=>R.get(r)*C.get(c)/N));
+  let chi=0,small=0; for(let i=0;i<rn.length;i++) for(let j=0;j<cn.length;j++){ chi+=(O[i][j]-E[i][j])**2/E[i][j]; if(E[i][j]<5) small++; }
+  const df=(rn.length-1)*(cn.length-1);
+  return {rn,cn,O,E,N,chi,df,p:chi2Upper(chi,df),small,V:Math.sqrt(chi/(N*(Math.min(rn.length,cn.length)-1))),fisherP:rn.length===2&&cn.length===2?fisher2x2(O[0][0],O[0][1],O[1][0],O[1][1]):null};
+}
+/* 群分けのルールから群の列を作る（数値の列は区切り値・中央値で区分） */
+function makeGroupColumn(o){
+  const c=colByName(o.group); if(!c) throw new Error('群分けに使う列を選んでください。');
+  const levels=new Set(c.raw.filter(s=>!isMissing(s)));
+  const useAsIs=!c.isNum||o.split==='asis'||(o.split==='auto'&&levels.size<=6);
+  if(useAsIs){ if(levels.size>12) throw new Error(`「${o.group}」には ${levels.size} 種類の値があり、群が多すぎます。数値の列なら「群の分け方」で区切り値を指定してください。`); return {name:o.group,rule:`「${o.group}」の値ごと（${[...levels].sort(natSort).slice(0,8).join('・')}${levels.size>8?'…':''}）`}; }
+  let cuts;
+  if(o.split==='cut'){
+    cuts=String(o.cuts||'').normalize('NFKC').split(/[,、\s]+/).filter(Boolean).map(Number);
+    if(!cuts.length||cuts.some(x=>!Number.isFinite(x))) throw new Error('区切り値を数値で入力してください（例：40 や 30,50）。');
+    cuts=[...new Set(cuts)].sort((a,b)=>a-b);
+  } else cuts=[median(c.num.filter(Number.isFinite))];
+  const lab=(i)=>`${i+1}: `+(i===0?`${tl(cuts[0])}未満`:i===cuts.length?`${tl(cuts[i-1])}以上`:`${tl(cuts[i-1])}以上${tl(cuts[i])}未満`);
+  const name=`${o.group}（${o.split==='cut'?cuts.map(tl).join('・')+' で区分':'中央値 '+tl(cuts[0])+' で 2 分割'}）`;
+  const raw=c.num.map(v=>{ if(!Number.isFinite(v)) return ''; let i=0; while(i<cuts.length&&v>=cuts[i]) i++; return lab(i); });
+  const col={name,raw,num:null,isNum:false,missing:raw.filter(s=>s==='').length,bad:new Map(),out:new Map(),derived:true};
+  const ix=DATA.cols.findIndex(x=>x.name===name); if(ix>=0) DATA.cols[ix]=col; else DATA.cols.push(col);
+  return {name,rule:`「${o.group}」を ${o.split==='cut'?'区切り値 '+cuts.map(tl).join('・'):'中央値 '+tl(cuts[0])} で区分`};
+}
+function defaultTargets(o){
+  if(!DATA) return [];
+  return DATA.cols.filter(c=>{
+    if(c.derived||c.name===o.group||ID_RE.test(c.name)) return false;
+    if(c.isNum) return !c.num.every((v,i)=>v===i+1||v===i);
+    const lv=new Set(c.raw.filter(s=>!isMissing(s))).size; return lv>=2&&lv<=10;   // 自由記述のような列は除く
+  }).map(c=>c.name);
+}
+
 function fisher2x2(a,b,c,d){
   const r1=a+b,r2=c+d,c1=a+c,n=r1+r2,lf=k=>lgamma(k+1);
   const pr=x=>Math.exp(lf(r1)+lf(r2)+lf(c1)+lf(n-c1)-lf(n)-lf(x)-lf(r1-x)-lf(c1-x)-lf(r2-c1+x));
@@ -652,6 +741,7 @@ function addCard(title,body){
   el.querySelector('.copy').onclick=e=>copyTables(el,e.target);
   document.getElementById('results').appendChild(el);
   el.scrollIntoView({behavior:'smooth',block:'start'});
+  return el;
 }
 function copyTables(el,btn){
   const txt=[...el.querySelectorAll('table')].map(t=>[...t.rows].map(r=>[...r.cells].map(c=>c.innerText.replace(/\s+/g,' ').trim()).join('\t')).join('\n')).join('\n\n');
@@ -785,6 +875,90 @@ function groupStatsTable(gs){
     gs.map(g=>{const d=describe(g.v,ALPHA()); return [esc(g.name),d.n,fmt(d.mean),fmt(d.sd),fmt(d.se),`[${fmt(d.ciLo)}, ${fmt(d.ciHi)}]`,fmt(d.med),fmt(d.min),fmt(d.max)];}));
 }
 const ANALYSES=[
+/* ---------------- おまかせ ---------------- */
+{id:'auto',cat:'おまかせ',name:'おまかせ検定（手法を自動で選ぶ）',desc:'群分けのルールと調べたい変数を選ぶだけで、データの種類・正規性・等分散性をチェックして適切な検定を自動で選び、実行します。選んだ理由も表示します。',
+ fields:[
+  {key:'design',type:'select',label:'比べ方',value:'between',options:[['between','別々の人（グループ）どうしを比べる'],['within','同じ人の複数回の測定を比べる（事前・事後など）']]},
+  {key:'group',type:'cat',label:'群分けに使う列',preferCat:true,when:o=>o.design==='between'},
+  {key:'split',type:'select',label:'群の分け方',value:'auto',options:[['auto','自動（種類が少なければ値ごと、多ければ中央値で 2 分割）'],['asis','値ごとに分ける'],['median','中央値で 2 群に分ける'],['cut','区切り値で分ける']],when:o=>o.design==='between'&&colByName(o.group)?.isNum},
+  {key:'cuts',type:'text',label:'区切り値（例：40 → 40未満 / 40以上、30,50 → 3 群）',value:'',when:o=>o.design==='between'&&o.split==='cut'&&colByName(o.group)?.isNum},
+  {key:'targets',type:'cols',label:'調べたい変数（複数可）',min:1,defFn:defaultTargets,when:o=>o.design==='between'},
+  {key:'cols',type:'nums',label:'比べる測定の列（測定した順に 2 つ以上）',min:2,defN:2,when:o=>o.design==='within'},
+  {key:'details',type:'check',label:'各検定の詳しい結果とグラフも表示',value:true}
+ ],
+ run(o){
+  const A=ALPHA(), rows=[], detail=[];
+  let title, rule;
+  if(o.design==='within'){
+    const cols=o.cols, Y=completeRows(cols), n=Y.length, k=cols.length;
+    if(n<3) throw new Error('すべての列に値がそろっている行が 3 行以上必要です。');
+    const colsV=cols.map((_,j)=>Y.map(r=>r[j])), ordinal=colsV.some(isOrdinal);
+    rule=`同じ人の ${k} 回の測定（${cols.join(' → ')}）。すべての列に値がある ${n} 人を使用`;
+    if(k===2){
+      const [x,y]=colsV, dif=x.map((v,i)=>y[i]-v), nc=normalCheck(dif);
+      if(!ordinal&&nc.ok){ const r=pairedTTest(x,y); rows.push({v:`${cols[0]} → ${cols[1]}`,kind:'数値（対応あり）',test:'対応のある t 検定',why:`差の分布が正規分布とみなせる（${nc.clt?`n=${nc.n} で歪みが小さい`:`Shapiro–Wilk p = ${fp(nc.sw.p)}`}）`,stat:`t(${r.df}) = ${fmt(r.t,2)}`,p:r.p,eff:`dz = ${fmt(r.dz,2)}`,dir:r.md>0?`${cols[1]} の方が高い`:`${cols[0]} の方が高い`}); detail.push(['tpair',{a:cols[0],b:cols[1]}]); }
+      else { const r=wilcoxonTest(x,y); rows.push({v:`${cols[0]} → ${cols[1]}`,kind:ordinal?'順序（段階評価）':'数値（対応あり）',test:'Wilcoxon の符号付順位検定',why:ordinal?'7 段階以下の整数（段階評価）のため順位にもとづく検定':`差の分布が正規分布でない（Shapiro–Wilk p = ${fp(nc.sw?.p)}）`,stat:`z = ${fmt(r.z,2)}`,p:r.p,eff:`r = ${fmt(r.r,2)}`,dir:r.Wp>r.Wm?`${cols[1]} の方が高い`:`${cols[0]} の方が高い`}); detail.push(['wil',{a:cols[0],b:cols[1]}]); }
+    } else {
+      const ncs=colsV.map(normalCheck), allOk=!ordinal&&ncs.every(c=>c.ok);
+      if(allOk){ const r=rmAnova(Y), useGG=r.eps<0.75; rows.push({v:cols.join(' → '),kind:'数値（対応あり）',test:'反復測定の分散分析'+(r.eps<1?'（Greenhouse–Geisser 補正）':''),why:`各測定が正規分布とみなせる。球面性の補正 ε = ${fmt(r.eps,2)}`,stat:`F(${fmtDf(r.df1*r.eps)}, ${fmtDf(r.df2*r.eps)}) = ${fmt(r.F,2)}`,p:r.pGG,eff:`偏η² = ${fmt(r.eta2p,2)}`,dir:''}); detail.push(['rmanova',{cols,posthoc:true}]); }
+      else { const r=friedmanTest(Y); rows.push({v:cols.join(' → '),kind:ordinal?'順序（段階評価）':'数値（対応あり）',test:'Friedman 検定',why:ordinal?'7 段階以下の整数（段階評価）のため順位にもとづく検定':`正規分布でない測定がある（${cols.filter((c,i)=>!ncs[i].ok).join('・')}）`,stat:`χ²(${r.df}) = ${fmt(r.Q,2)}`,p:r.p,eff:`Kendall W = ${fmt(r.W,2)}`,dir:''}); detail.push(['friedman',{cols,posthoc:true}]); }
+    }
+    title='おまかせ検定：'+cols.join(' → ');
+  } else {
+    const g=makeGroupColumn(o); rule=g.rule;
+    const targets=(o.targets||[]).filter(t=>t!==o.group&&t!==g.name);
+    if(!targets.length) throw new Error('群分けの列とは別に、調べたい変数を 1 つ以上選んでください。');
+    const gRaw=rawOf(g.name);
+    for(const t of targets){
+      const c=colByName(t); if(!c) continue;
+      if(c.isNum){
+        const gs=groupsOf(t,g.name).filter(x=>x.v.length>0);
+        if(gs.length<2){ rows.push({v:t,kind:'数値',test:'—',why:'データのある群が 2 つ未満',stat:'',p:NaN,eff:'',dir:''}); continue; }
+        if(gs.some(x=>x.v.length<3)){ rows.push({v:t,kind:'数値',test:'—',why:`データが 3 件未満の群がある（${gs.filter(x=>x.v.length<3).map(x=>x.name).join('・')}）`,stat:'',p:NaN,eff:'',dir:''}); continue; }
+        const all=gs.flatMap(x=>x.v), ordinal=isOrdinal(all), ncs=gs.map(x=>normalCheck(x.v)), normal=!ordinal&&ncs.every(x=>x.ok);
+        const nonNormal=gs.filter((x,i)=>!ncs[i].ok).map(x=>x.name);
+        const whyNP=ordinal?'7 段階以下の整数（段階評価など）のため、順位にもとづく検定':`正規分布でない群がある（${nonNormal.join('・')}：Shapiro–Wilk）`;
+        const whyP='各群が正規分布とみなせる'+(ncs.some(x=>x.clt)?'（大きい群は n≥30・歪みが小さいため）':'（Shapiro–Wilk）');
+        const kind=ordinal?'順序（段階評価）':'数値';
+        if(gs.length===2){
+          const [a,b]=gs;
+          if(normal){ const r=welchTest(a.v,b.v); rows.push({v:t,kind,test:'Welch の t 検定',why:whyP+'。等分散を仮定しない Welch 法',stat:`t(${fmtDf(r.df)}) = ${fmt(r.t,2)}`,p:r.p,eff:`d = ${fmt(r.d,2)}`,dir:`平均：${a.name} ${fmt(mean(a.v),2)} / ${b.name} ${fmt(mean(b.v),2)}`}); detail.push(['t2',{group:g.name,value:t}]); }
+          else { const r=mwTest(a.v,b.v); rows.push({v:t,kind,test:'Mann–Whitney の U 検定',why:whyNP,stat:`U = ${fmt(r.U,1)}, z = ${fmt(r.z,2)}`,p:r.p,eff:`r = ${fmt(r.r,2)}`,dir:`中央値：${a.name} ${fmt(median(a.v),2)} / ${b.name} ${fmt(median(b.v),2)}`}); detail.push(['mw',{group:g.name,value:t}]); }
+        } else {
+          if(normal){
+            const lev=levene(gs.map(x=>x.v));
+            if(lev.p>=A){ const r=anova1(gs.map(x=>x.v)); rows.push({v:t,kind,test:'一元配置分散分析',why:`${whyP}。分散も等しいとみなせる（Levene p = ${fp(lev.p)}）`,stat:`F(${r.dfb}, ${r.dfw}) = ${fmt(r.F,2)}`,p:r.p,eff:`η² = ${fmt(r.eta2,2)}`,dir:'平均：'+gs.map(x=>`${x.name} ${fmt(mean(x.v),2)}`).join(' / ')}); }
+            else { const r=welchAnova(gs.map(x=>x.v)), e=anova1(gs.map(x=>x.v)); rows.push({v:t,kind,test:'Welch の分散分析',why:`${whyP}。ただし分散が等しくない（Levene p = ${fp(lev.p)}）`,stat:`F(${r.df1}, ${fmtDf(r.df2)}) = ${fmt(r.F,2)}`,p:r.p,eff:`η² = ${fmt(e.eta2,2)}`,dir:'平均：'+gs.map(x=>`${x.name} ${fmt(mean(x.v),2)}`).join(' / ')}); }
+            detail.push(['anova',{group:g.name,value:t,posthoc:true}]);
+          } else { const r=kwTest(gs.map(x=>x.v)); rows.push({v:t,kind,test:'Kruskal–Wallis 検定',why:whyNP,stat:`H(${r.df}) = ${fmt(r.H,2)}`,p:r.p,eff:`ε² = ${fmt(r.eps,2)}`,dir:'中央値：'+gs.map(x=>`${x.name} ${fmt(median(x.v),2)}`).join(' / ')}); detail.push(['kw',{group:g.name,value:t,posthoc:true}]); }
+        }
+      } else {
+        const ct=crossTab(gRaw,c.raw);
+        if(ct.rn.length<2||ct.cn.length<2){ rows.push({v:t,kind:'カテゴリ',test:'—',why:'値が 1 種類しかない',stat:'',p:NaN,eff:'',dir:''}); continue; }
+        if(ct.cn.length>20){ rows.push({v:t,kind:'カテゴリ',test:'—',why:`種類が多すぎる（${ct.cn.length} 種類）`,stat:'',p:NaN,eff:'',dir:''}); continue; }
+        const cells=ct.rn.length*ct.cn.length;
+        if(ct.fisherP!=null&&ct.small>0) rows.push({v:t,kind:'カテゴリ',test:'Fisher の正確検定',why:'2×2 表で期待度数が 5 未満のセルがある',stat:'',p:ct.fisherP,eff:`V = ${fmt(ct.V,2)}`,dir:''});
+        else rows.push({v:t,kind:'カテゴリ',test:'カイ二乗検定',why:'カテゴリの変数なのでクロス集計'+(ct.small/cells>0.2?'（期待度数 5 未満のセルが多く、結果は参考程度）':''),stat:`χ²(${ct.df}) = ${fmt(ct.chi,2)}`,p:ct.p,eff:`V = ${fmt(ct.V,2)}`,dir:''});
+        detail.push(['chi',{row:g.name,col:t,exp:true}]);
+      }
+    }
+    title='おまかせ検定：'+g.name+' で群分け';
+  }
+  const valid=rows.filter(r=>Number.isFinite(r.p)), adj=holm(valid.map(r=>r.p)); valid.forEach((r,i)=>r.adj=adj[i]);
+  const multi=valid.length>1;
+  const body=`<p class="sub">群分け：${esc(rule)}</p>`+
+    table(['変数','データの種類','選んだ検定','選んだ理由','検定統計量','p 値',...(multi?['p 値（Holm 補正）']:[]),'効果量','判定','群ごとの値'],
+      rows.map(r=>rowP([`<b>${esc(r.v)}</b>`,esc(r.kind),`<b>${esc(r.test)}</b>`,`<span class="l" style="white-space:normal;display:inline-block;min-width:220px;text-align:left">${esc(r.why)}</span>`,esc(r.stat),Number.isFinite(r.p)?pCell(r.p):'—',...(multi?[Number.isFinite(r.p)?pCell(r.adj):'—']:[]),esc(r.eff),Number.isFinite(r.p)?(r.p<A?'<b style="color:var(--sig)">有意差あり</b>':'有意差なし'):'検定できず',`<span style="white-space:normal;display:inline-block;min-width:160px;text-align:left">${esc(r.dir)}</span>`],multi?r.adj:r.p)),{sigCol:5})+
+    (()=>{ const sig=valid.filter(r=>r.p<A), sigAdj=valid.filter(r=>r.adj<A);
+      if(!valid.length) return '';
+      let t=`<p class="verdict ${sig.length?'sig':''}">${valid.length} 件中 <b>${sig.length} 件</b>で有意水準 ${A} の有意差がありました${sig.length?`：${sig.map(r=>esc(r.v)).join('、')}`:''}。`;
+      if(multi) t+=`<br>複数の検定をまとめて行うと偶然の有意差が出やすくなります。Holm 法で補正すると <b>${sigAdj.length} 件</b>${sigAdj.length?`（${sigAdj.map(r=>esc(r.v)).join('、')}）`:''}です。`;
+      return t+'</p>'; })()+
+    `<p class="note">選び方のルール：①カテゴリの変数 → カイ二乗検定（2×2 で期待度数が小さければ Fisher の正確検定）。②7 段階以下の整数（段階評価）→ 順位にもとづく検定。③数値の変数は、各群が正規分布とみなせれば（Shapiro–Wilk で p ≥ ${A}、または n≥30 で歪度の絶対値 < 1）平均を比べる検定、そうでなければ順位にもとづく検定。2 群なら Welch の t 検定 / Mann–Whitney、3 群以上なら分散分析（分散が等しくなければ Welch の分散分析）/ Kruskal–Wallis。同じ人の測定なら対応のある t 検定 / Wilcoxon、3 回以上なら反復測定の分散分析 / Friedman 検定。3 群以上で有意なら、詳しい結果に多重比較（Holm 法）を表示します。自動選択は一般的な目安です。研究計画で手法が決まっている場合はそれに従ってください。</p>`;
+  const card=addCard(title,body);
+  if(o.details) for(const [id,opts] of detail){ try{ ANALYSES.find(a=>a.id===id).run(opts); }catch(e){ addCard('詳細：エラー',`<p class="err">${esc(e.message)}</p>`); } }
+  card.scrollIntoView({behavior:'smooth',block:'start'});
+ }},
 /* ---------------- 基本 ---------------- */
 {id:'desc',cat:'基本',name:'記述統計',desc:'平均・標準偏差・四分位・歪度・尖度などの要約統計量を計算します。グループ列を指定するとグループごとに集計します。',
  fields:[{key:'vars',type:'nums',label:'変数（複数可）',min:1,defN:99},{key:'group',type:'cat',optional:true,label:'グループ別に集計（任意）'}],
@@ -905,16 +1079,37 @@ const ANALYSES=[
     `η² の目安：.01 小、.06 中、.14 大。ω² = ${fmt(r.omega2)}。</p>`;
   if(lev.p<ALPHA()&&wa) body+=`<p class="warn">Levene 検定で分散が等しくない可能性が示されました。Welch の分散分析（${pText(wa.p)}）の結果も参考にしてください。</p>`;
   if(o.posthoc&&gs.length>2){
-    const pr=[]; for(let i=0;i<gs.length;i++) for(let j=i+1;j<gs.length;j++){
-      const a=gs[i],b=gs[j], diff=mean(a.v)-mean(b.v), se=Math.sqrt(r.msw*(1/a.v.length+1/b.v.length)), t=diff/se, p=tP2(t,r.dfw);
-      pr.push({a:a.name,b:b.name,diff,se,t,p});
+    const unequal=lev.p<ALPHA(), pr=[]; for(let i=0;i<gs.length;i++) for(let j=i+1;j<gs.length;j++){
+      const a=gs[i],b=gs[j];
+      if(unequal){ const w=welchTest(a.v,b.v); pr.push({a:a.name,b:b.name,diff:w.diff,se:w.se,t:w.t,df:w.df,p:w.p}); }
+      else { const diff=mean(a.v)-mean(b.v), se=Math.sqrt(r.msw*(1/a.v.length+1/b.v.length)), t=diff/se; pr.push({a:a.name,b:b.name,diff,se,t,df:r.dfw,p:tP2(t,r.dfw)}); }
     }
     const adj=holm(pr.map(x=>x.p));
-    body+='<h4>多重比較（プールした誤差分散による t 検定、Holm 法で補正）</h4>'+
-      table(['比較','平均の差','標準誤差','t','p 値（補正前）','p 値（Holm 補正）'],pr.map((x,i)=>rowP([`${esc(x.a)} − ${esc(x.b)}`,fmt(x.diff),fmt(x.se),fmt(x.t),fp(x.p),pCell(adj[i])],adj[i])),{sigCol:5});
+    body+=`<h4>多重比較（${unequal?'分散が等しくないため Welch の t 検定':'プールした誤差分散による t 検定'}、Holm 法で補正）</h4>`+
+      table(['比較','平均の差','標準誤差','t','自由度','p 値（補正前）','p 値（Holm 補正）'],pr.map((x,i)=>rowP([`${esc(x.a)} − ${esc(x.b)}`,fmt(x.diff),fmt(x.se),fmt(x.t),fmtDf(x.df),fp(x.p),pCell(adj[i])],adj[i])),{sigCol:6});
   }
   body+=`<div class="charts">${boxSVG(gs,{ylabel:o.group?o.value:'値',title:'箱ひげ図（◇ は平均）'})}${barSVG(gs.map(g=>g.name),gs.map(g=>mean(g.v)),{lo:gs.map(g=>describe(g.v,ALPHA()).ciLo),hi:gs.map(g=>describe(g.v,ALPHA()).ciHi),yl:'平均',title:`平均と${CIPCT()}%信頼区間`})}</div>`;
   addCard('一元配置分散分析：'+(o.group?`${o.value} by ${o.group}`:gs.map(g=>g.name).join('・')),body);
+ }},
+{id:'rmanova',cat:'平均の比較（パラメトリック）',name:'反復測定の分散分析',desc:'同じ人を 3 回以上測定したデータ（列が測定回）の平均に差があるかを検定します。球面性が成り立たない場合に備え Greenhouse–Geisser 補正も表示します。',
+ fields:[{key:'cols',type:'nums',label:'測定の列（測定した順に 2 つ以上）',min:2,defN:3},{key:'posthoc',type:'check',label:'多重比較を行う',value:true}],
+ run(o){
+  const cols=o.cols, Y=completeRows(cols); if(Y.length<3) throw new Error('すべての列に値がそろっている行が 3 行以上必要です。');
+  const r=rmAnova(Y), A=ALPHA(), ds=cols.map((_,j)=>describe(Y.map(x=>x[j]),A));
+  let body=`<p class="sub">すべての列に値がある ${r.n} 人を使用。</p>`+table(['測定','n','平均','標準偏差','標準誤差',`平均の${CIPCT()}%信頼区間`],cols.map((c,j)=>[esc(c),ds[j].n,fmt(ds[j].mean),fmt(ds[j].sd),fmt(ds[j].se),`[${fmt(ds[j].ciLo)}, ${fmt(ds[j].ciHi)}]`]))+
+    '<h4>分散分析表</h4>'+table(['変動要因','平方和','自由度','平均平方','F','p 値','p 値（GG 補正）','偏η²'],[
+      rowP(['測定（条件）',fmt(r.SSc),r.df1,fmt(r.SSc/r.df1),fmt(r.F),pCell(r.p),pCell(r.pGG),fmt(r.eta2p)],r.pGG),
+      ['個人差',fmt(r.SSs),r.n-1,fmt(r.SSs/(r.n-1)),'','','',''],
+      ['誤差',fmt(r.SSe),r.df2,fmt(r.SSe/r.df2),'','','','']],{sigCol:6})+
+    verdict(r.pGG,'測定の間で平均に差があります。','測定の間で平均に差があるとはいえません。',`F(${fmtDf(r.df1*r.eps)}, ${fmtDf(r.df2*r.eps)}) = ${fmt(r.F,2)}, ${pText(r.pGG)}, 偏η² = ${fmt(r.eta2p,3)}, ε = ${fmt(r.eps,3)}`)+
+    `<p class="note">Greenhouse–Geisser の ε = ${fmt(r.eps,3)}（1 に近いほど球面性の仮定に近い）。判定には補正後の p 値を使っています。</p>`;
+  if(o.posthoc&&cols.length>2){
+    const pr=[]; for(let i=0;i<cols.length;i++) for(let j=i+1;j<cols.length;j++){ const t=pairedTTest(Y.map(x=>x[i]),Y.map(x=>x[j])); pr.push({a:cols[i],b:cols[j],...t}); }
+    const adj=holm(pr.map(x=>x.p));
+    body+='<h4>多重比較（対応のある t 検定、Holm 法で補正）</h4>'+table(['比較','平均の差（後 − 前）','t','自由度','p 値（補正前）','p 値（Holm 補正）','dz'],pr.map((x,i)=>rowP([`${esc(x.a)} → ${esc(x.b)}`,fmt(x.md),fmt(x.t),x.df,fp(x.p),pCell(adj[i]),fmt(x.dz)],adj[i])),{sigCol:5});
+  }
+  body+=barSVG(cols,ds.map(d=>d.mean),{lo:ds.map(d=>d.ciLo),hi:ds.map(d=>d.ciHi),yl:'平均',title:`平均と${CIPCT()}%信頼区間`});
+  addCard('反復測定の分散分析：'+cols.join(' → '),body);
  }},
 /* ---------------- ノンパラメトリック ---------------- */
 {id:'mw',cat:'ノンパラメトリック検定',name:'Mann–Whitney の U 検定',desc:'独立した 2 群の分布（中央値の位置）を、正規分布を仮定せずに比べます。t 検定のノンパラメトリック版です。',
@@ -966,6 +1161,23 @@ const ANALYSES=[
   addCard('Kruskal–Wallis 検定：'+(o.group?`${o.value} by ${o.group}`:gs.map(g=>g.name).join('・')),body+boxSVG(gs,{ylabel:o.group?o.value:'値',title:'箱ひげ図'}));
  }},
 /* ---------------- 関係 ---------------- */
+{id:'friedman',cat:'ノンパラメトリック検定',name:'Friedman 検定',desc:'同じ人を 3 回以上測定したデータを、正規分布を仮定せずに比べます。反復測定の分散分析のノンパラメトリック版です。多重比較は Holm 補正つき Wilcoxon 検定。',
+ fields:[{key:'cols',type:'nums',label:'測定の列（測定した順に 2 つ以上）',min:2,defN:3},{key:'posthoc',type:'check',label:'多重比較を行う',value:true}],
+ run(o){
+  const cols=o.cols, Y=completeRows(cols); if(Y.length<3) throw new Error('すべての列に値がそろっている行が 3 行以上必要です。');
+  const r=friedmanTest(Y);
+  let body=`<p class="sub">すべての列に値がある ${r.n} 人を使用。</p>`+table(['測定','n','中央値','第1四分位','第3四分位','平均順位'],cols.map((c,j)=>{ const s=Y.map(x=>x[j]).sort((a,b)=>a-b); return [esc(c),r.n,fmt(quantile(s,.5)),fmt(quantile(s,.25)),fmt(quantile(s,.75)),fmt(r.meanRank[j],2)]; }))+
+    table(['χ²','自由度','p 値','Kendall の W'],[rowP([fmt(r.Q),r.df,pCell(r.p),fmt(r.W)],r.p)],{sigCol:2})+
+    verdict(r.p,'測定の間で分布に差があります。','測定の間で分布に差があるとはいえません。',`χ²(${r.df}) = ${fmt(r.Q,2)}, ${pText(r.p)}, W = ${fmt(r.W,2)}`)+
+    '<p class="note">Kendall の W（効果量）の目安：0.1 小、0.3 中、0.5 大。同順位補正あり。</p>';
+  if(o.posthoc&&cols.length>2){
+    const pr=[]; for(let i=0;i<cols.length;i++) for(let j=i+1;j<cols.length;j++){ const t=wilcoxonTest(Y.map(x=>x[i]),Y.map(x=>x[j])); pr.push({a:cols[i],b:cols[j],...t}); }
+    const adj=holm(pr.map(x=>x.p));
+    body+='<h4>多重比較（Wilcoxon の符号付順位検定、Holm 法で補正）</h4>'+table(['比較','W+','W−','z','p 値（補正前）','p 値（Holm 補正）','r'],pr.map((x,i)=>rowP([`${esc(x.a)} → ${esc(x.b)}`,fmt(x.Wp,1),fmt(x.Wm,1),fmt(x.z),fp(x.p),pCell(adj[i]),fmt(x.r)],adj[i])),{sigCol:5});
+  }
+  body+=boxSVG(cols.map((c,j)=>({name:c,v:Y.map(x=>x[j])})),{ylabel:'値',title:'箱ひげ図'});
+  addCard('Friedman 検定：'+cols.join(' → '),body);
+ }},
 {id:'chi',cat:'関係を調べる',name:'クロス集計とカイ二乗検定',desc:'2 つのカテゴリ変数（性別×回答 など）に関連があるかを検定します。2×2 表では Fisher の正確検定も表示します。',
  fields:[{key:'row',type:'cat',label:'行の変数',preferCatIdx:0},{key:'col',type:'cat',label:'列の変数',preferCatIdx:1},{key:'exp',type:'check',label:'期待度数・行％も表示',value:true}],
  run(o){
@@ -1107,6 +1319,7 @@ function getOpts(a){
         else { const idx=f.preferCatIdx??catPick++; o[f.key]=cats[idx]??cats[0]??all[Math.min(idx,all.length-1)]??''; }
       }
     }
+    else if(f.type==='cols'){ if(v&&(o._d===DATA||v.some(x=>all.includes(x)))) o[f.key]=v.filter(x=>all.includes(x)); else o[f.key]=f.defFn?f.defFn(o):[]; }
     else if(f.type==='nums'){ if(v&&(o._d===DATA||v.some(x=>nums.includes(x)))) o[f.key]=v.filter(x=>nums.includes(x)); else { o[f.key]=dn.slice(f.defSkip||0,(f.defSkip||0)+(f.defN||2)); if(!o[f.key].length) o[f.key]=dn.slice(0,f.defN||2); } }
     else if(v===undefined) o[f.key]=f.value;
   }
@@ -1133,6 +1346,11 @@ function renderForm(){
       if(!nums.length) h+=NO_NUM_MSG;
       h+='<div class="checks">'+nums.map(c=>`<label><input type="checkbox" data-k="${f.key}" value="${esc(c)}"${o[f.key].includes(c)?' checked':''}> ${esc(c)}</label>`).join('')+'</div>';
       h+=`<div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn" data-all="${f.key}" style="padding:2px 8px;font-size:12px">全選択</button><button type="button" class="btn" data-none="${f.key}" style="padding:2px 8px;font-size:12px">全解除</button></div>`;
+    } else if(f.type==='cols'){
+      h+='<div class="checks">'+all.filter(c=>c!==o.group).map(c=>{const col=colByName(c); return `<label><input type="checkbox" data-k="${f.key}" value="${esc(c)}"${o[f.key].includes(c)?' checked':''}> ${esc(c)} <span class="note" style="margin:0">${col.isNum?'数値':'カテゴリ'}</span></label>`;}).join('')+'</div>';
+      h+=`<div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn" data-all="${f.key}" style="padding:2px 8px;font-size:12px">全選択</button><button type="button" class="btn" data-none="${f.key}" style="padding:2px 8px;font-size:12px">全解除</button></div>`;
+    } else if(f.type==='text'){
+      h+=`<input type="text" data-k="${f.key}" value="${esc(o[f.key]??'')}" style="width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">`;
     } else if(f.type==='number'){
       h+=`<input type="number" step="any" data-k="${f.key}" value="${esc(o[f.key])}">`;
     } else if(f.type==='select'){
@@ -1148,7 +1366,7 @@ function renderForm(){
 form.addEventListener('change',e=>{
   const el=e.target, k=el.dataset.k; if(!k) return;
   const a=curAna(), o=OPTS[a.id], f=a.fields.find(x=>x.key===k);
-  if(f.type==='nums') o[k]=[...form.querySelectorAll(`input[data-k="${k}"]:checked`)].map(x=>x.value);
+  if(f.type==='nums'||f.type==='cols') o[k]=[...form.querySelectorAll(`input[data-k="${k}"]:checked`)].map(x=>x.value);
   else if(f.type==='check') o[k]=el.checked;
   else if(f.type==='number') o[k]=parseFloat(el.value);
   else o[k]=el.value;
@@ -1156,7 +1374,8 @@ form.addEventListener('change',e=>{
 });
 form.addEventListener('click',e=>{
   const k=e.target.dataset.all||e.target.dataset.none; if(!k) return;
-  OPTS[curAna().id][k]=e.target.dataset.all?numCols():[]; renderForm();
+  const f=curAna().fields.find(x=>x.key===k);
+  OPTS[curAna().id][k]=e.target.dataset.all?(f.type==='cols'?allCols().filter(c=>c!==OPTS[curAna().id].group):numCols()):[]; renderForm();
 });
 anaSel.addEventListener('change',()=>{ renderForm(); try{localStorage.setItem('statlab.ana',anaSel.value);}catch(e){} });
 document.getElementById('runBtn').addEventListener('click',()=>{
@@ -1165,7 +1384,7 @@ document.getElementById('runBtn').addEventListener('click',()=>{
   try{
     for(const f of a.fields){
       if(f.when&&!f.when(o)) continue;
-      if(f.type==='nums'){ if(o[f.key].length<(f.min||1)) throw new Error(`「${f.label}」を ${f.min||1} つ以上選んでください。`); if(f.max&&o[f.key].length>f.max) throw new Error(`「${f.label}」は ${f.max} つ選んでください。`); }
+      if(f.type==='nums'||f.type==='cols'){ if(o[f.key].length<(f.min||1)) throw new Error(`「${f.label}」を ${f.min||1} つ以上選んでください。`); if(f.max&&o[f.key].length>f.max) throw new Error(`「${f.label}」は ${f.max} つ選んでください。`); }
       if((f.type==='num'||(f.type==='cat'&&!f.optional))&&!o[f.key]) throw new Error(`「${f.label}」を選んでください。`);
     }
     a.run(o);
