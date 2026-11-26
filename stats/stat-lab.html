@@ -141,7 +141,8 @@ code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:12px}
   <div class="panel">
     <h2>1. データを読み込む</h2>
     <div class="toolbar">
-      <label class="btn primary">📂 CSV / TSV / テキストを開く<input type="file" id="fileInput" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden></label>
+      <label class="btn primary">📂 Excel / CSV ファイルを開く<input type="file" id="fileInput" accept=".xlsx,.xlsm,.csv,.tsv,.txt,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
+      <label class="inline" id="sheetWrap" hidden>シート <select id="sheetSel" style="padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></select></label>
       <button class="btn" id="sampleBtn">サンプルデータを使う</button>
       <button class="btn" id="clearBtn">データを消去</button>
       <label class="inline"><input type="checkbox" id="hasHeader" checked> 1行目は列名</label>
@@ -153,7 +154,7 @@ code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:12px}
           <option value="sd3">平均 ± 3 標準偏差より外</option>
         </select></label>
     </div>
-    <div class="drop" id="drop">ここにファイルをドラッグ＆ドロップ、または下の欄に Excel の表をそのまま貼り付けて「反映」</div>
+    <div class="drop" id="drop">ここに Excel（.xlsx）や CSV ファイルをドラッグ＆ドロップ、または下の欄に Excel の表をそのまま貼り付けて「反映」</div>
     <textarea id="rawText" spellcheck="false" placeholder="例）&#10;性別,年齢,身長&#10;男,23,172.5&#10;女,31,158.0"></textarea>
     <div class="toolbar" style="margin-top:8px;margin-bottom:0">
       <button class="btn primary" id="applyBtn">反映</button>
@@ -414,6 +415,12 @@ const isExcelErr=s=>/^#(n\/a|value!|div\/0!|ref!|name\?|num!|null!|spill!|calc!)
 const isMissing=s=>{ const t=String(s).trim().toLowerCase(); return MISSING.has(t)||isExcelErr(t); };
 /* 表記の正規化：全角英数→半角、各種ダッシュ→-、連続空白→1つ */
 function norm(s){ return String(s??'').normalize('NFKC').replace(/[‐-―−ーｰ](?=\s*[\d.])/g,'-').replace(/[‐-―−]/g,'-').replace(/\s+/g,' ').trim(); }
+/* 単位・通貨記号つきの数値（23歳・170cm・12%・¥1,200 など） */
+function toNumUnit(s){
+  const t=s.replace(/^[¥$€£]\s*/,'').replace(/^(約|およそ)/,'').replace(/\s*(%|‰|[a-zA-Zµ°]{1,4}|[\u3040-\u30ff\u4e00-\u9fff]{1,3}(\/[\u3040-\u30ff\u4e00-\u9fff]{1,2})?)$/,'');
+  if(t===s||t==='') return null;
+  const v=toNum(t); return (v===null||Number.isNaN(v))?null:v;
+}
 function toNum(s){
   if(s===''||isMissing(s)) return NaN;
   let t=s.replace(/^\+/,'');
@@ -425,13 +432,14 @@ let DATA=null; // {cols:[{name,raw,num,isNum,missing,bad,out}], n, report}
 
 function parseText(text){
   text=text.replace(/^﻿/,'');
-  const firstLines=text.split(/\r?\n/).filter(l=>l.trim()).slice(0,5);
-  let delim=',';
-  if(firstLines.length){
-    let best=-1;
-    for(const d of ['\t',',',';']){ const cnt=Math.min(...firstLines.map(l=>l.split(d).length)); if(cnt>best){best=cnt;delim=d;} }
-    if(best<=1 && /\s{1,}/.test(firstLines[0].trim())) delim='ws';
+  const firstLines=text.split(/\r?\n/).filter(l=>l.trim()).slice(0,30);
+  let delim=null, bestScore=0;
+  for(const d of ['\t',',',';']){   // いちばん多くの行で同じ列数になる区切り文字を選ぶ（タイトル行があっても判定できる）
+    const freq={}; firstLines.forEach(l=>{ const c=l.split(d).length; if(c>1) freq[c]=(freq[c]||0)+1; });
+    const top=Object.entries(freq).sort((a,b)=>b[1]-a[1]||b[0]-a[0])[0];
+    if(top){ const score=top[1]*1000+Number(top[0]); if(score>bestScore){ bestScore=score; delim=d; } }
   }
+  if(!delim) delim=firstLines.filter(l=>/\S\s+\S/.test(l.trim())).length>firstLines.length/2?'ws':',';
   const rows=[];
   if(delim==='ws'){ text.split(/\r?\n/).forEach((l,i)=>{ if(l.trim()){ const r=l.trim().split(/\s+/); r.line=i+1; rows.push(r); } }); return rows; }
   let row=[],f='',q=false,line=1,rowLine=1;
@@ -453,14 +461,21 @@ const uniq=a=>[...new Set(a)];
 function buildData(text,hasHeader,opt={}){
   const rows0=parseText(text);
   if(!rows0.length) return null;
-  const rep={rows:[],cells:[],norm:[],outliers:[],mixed:[],dupIds:[]};
+  const rep={rows:[],cells:[],norm:[],outliers:[],mixed:[],dupIds:[],units:[]};
+  const show=r=>(r.orig||r).map(s=>s.trim()).join(', ').slice(0,80);
+  // 表の上にあるタイトル行（値が 1 つだけの行）を飛ばす
+  const filled=rows0.map(r=>r.filter(c=>c.trim()!=='').length), fq={};
+  filled.forEach(c=>fq[c]=(fq[c]||0)+1);
+  const modeFilled=+Object.entries(fq).sort((a,b)=>b[1]-a[1]||b[0]-a[0])[0][0];
+  while(rows0.length>2&&modeFilled>=2&&rows0[0].filter(c=>c.trim()!=='').length<=1){ const t=rows0.shift(); rep.rows.push({line:t.line,reason:'表のタイトル行（見出しより上の行）',text:show(t)}); }
   const header=hasHeader?rows0.shift().map(norm):null;
   const body=rows0.map(r=>{ const c=r.map(norm); c.line=r.line; c.orig=r; return c; });
-  // 列数：見出しがあれば見出しの幅、なければ最も多い行の幅
-  let w;
-  if(header) w=Math.max(lastNE(header)+1,1);
-  else { const cnt={}; body.forEach(r=>{ const k=lastNE(r)+1; cnt[k]=(cnt[k]||0)+1; }); w=+Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0]; if(cnt[w]<body.length*0.8) w=Math.max(...body.map(r=>lastNE(r)+1)); }
-  const show=r=>r.orig.map(s=>s.trim()).join(', ').slice(0,80);
+  // 列数：大部分の行の列数（見出しの方が広ければ見出し）。それより広い行が少数だけなら「ずれた行」として除外
+  const wc={}; body.forEach(r=>{ const k=lastNE(r)+1; wc[k]=(wc[k]||0)+1; });
+  const modeW=body.length?+Object.entries(wc).sort((a,b)=>b[1]-a[1]||b[0]-a[0])[0][0]:0;
+  let w=Math.max(header?lastNE(header)+1:0,modeW,1);
+  const wider=body.filter(r=>lastNE(r)+1>w).length;
+  if(wider>Math.max(1,body.length*0.1)) w=Math.max(w,...body.map(r=>lastNE(r)+1));
   const idCol=header?header.findIndex(h=>ID_RE.test(h)):-1, seenId=new Map();
   const keep=[];
   for(const r of body){
@@ -481,7 +496,8 @@ function buildData(text,hasHeader,opt={}){
   const lines=keep.map(r=>r.line);
   const cols=names.map((name,j)=>{
     const raw=keep.map(r=>r[j]??''), orig=keep.map(r=>(r.orig[j]??'').trim());
-    const nums=raw.map(toNum);
+    const nums=raw.map(toNum), loose=new Set();
+    nums.forEach((v,i)=>{ if(v===null){ const u=toNumUnit(raw[i]); if(u!==null){ nums[i]=u; loose.add(i); } } });
     const nonMiss=nums.filter(v=>v===null||!Number.isNaN(v)).length, numOk=nums.filter(v=>v!==null&&!Number.isNaN(v)).length;
     const isNum=numOk>=3?numOk/nonMiss>=0.8:(numOk>0&&numOk===nonMiss);
     const bad=new Map(); // 行index → 理由
@@ -490,11 +506,12 @@ function buildData(text,hasHeader,opt={}){
     if(isNum){
       const idx=[]; num=nums.map((v,i)=>{ if(v===null){ idx.push(i); bad.set(i,'数値でない値'); return NaN; } return v; });
       if(idx.length) rep.cells.push({col:name,reason:'数値の列に数値でない値',count:idx.length,examples:uniq(idx.map(i=>orig[i])).slice(0,6),lines:idx.map(i=>lines[i])});
+      if(loose.size){ const li=[...loose]; rep.units.push({col:name,count:li.length,examples:uniq(li.map(i=>`「${orig[i]}」→ ${tl(num[i])}`)).slice(0,4)}); }
     } else if(numOk>0&&numOk/nonMiss>=0.5) rep.mixed.push({col:name,num:numOk,other:nonMiss-numOk,examples:uniq(raw.filter((s,i)=>nums[i]===null)).slice(0,5)});
     const errIdx=[...bad.entries()].filter(([,r])=>r==='Excel のエラー値').map(([i])=>i);
     if(errIdx.length) rep.cells.push({col:name,reason:'Excel のエラー値（#N/A・#DIV/0! など）',count:errIdx.length,examples:uniq(errIdx.map(i=>orig[i])).slice(0,6),lines:errIdx.map(i=>lines[i])});
     if(!isNum){
-      const ch=[]; raw.forEach((s,i)=>{ if(s!==orig[i]&&s!=='') ch.push(i); });
+      const ch=[]; raw.forEach((s,i)=>{ if(s!==orig[i].replace(/\s+/g,' ')&&s!=='') ch.push(i); });
       if(ch.length) rep.norm.push({col:name,count:ch.length,examples:uniq(ch.map(i=>`「${orig[i]}」→「${raw[i]}」`)).slice(0,4)});
     }
     const out=new Map();
@@ -541,7 +558,7 @@ function renderReport(R){
   const lineList=ls=>{ const u=uniq(ls); return u.slice(0,15).join('・')+(u.length>15?` ほか ${u.length-15} 行`:''); };
   let h='';
   const total=R.rows.length+R.cellCount+R.outCount;
-  if(!total&&!R.norm.length&&!R.mixed.length&&!R.dupIds.length) return '<p class="ok">✓ 問題のあるデータは見つかりませんでした。</p>';
+  if(!total&&!R.norm.length&&!R.mixed.length&&!R.dupIds.length&&!R.units.length) return '<p class="ok">✓ 問題のあるデータは見つかりませんでした。</p>';
   if(total) h+=`<p>次のデータを分析から<b>自動で除外</b>しました。行番号は元データ（ファイル・貼り付けたテキスト）の行です。プレビューでは除外したセルを<span style="color:var(--sig);text-decoration:line-through">取り消し線</span>で示しています。</p>`;
   if(R.rows.length){
     const by={}; R.rows.forEach(x=>{ (by[x.reason]=by[x.reason]||[]).push(x); });
@@ -549,6 +566,7 @@ function renderReport(R){
   }
   if(R.cells.length) h+=`<h3>除外した値（欠損として扱う）：${R.cellCount} 件</h3><ul>`+R.cells.map(c=>`<li><b>${esc(c.col)}</b>：${esc(c.reason)} ${c.count} 件 — 例：${c.examples.map(e=>`「${esc(e)}」`).join(' ')}（${lineList(c.lines)} 行目）</li>`).join('')+'</ul>';
   if(R.outliers.length) h+=`<h3>外れ値として除外：${R.outCount} 件</h3><ul>`+R.outliers.map(c=>`<li><b>${esc(c.col)}</b>：${c.count} 件（範囲 ${fmt(c.lo,2)}〜${fmt(c.hi,2)} の外）— ${c.examples.map(v=>tl(v)).join('、')}（${lineList(c.lines)} 行目）</li>`).join('')+'</ul>';
+  if(R.units.length) h+=`<h3>単位・記号を取り除いて数値として読み取り</h3><ul>`+R.units.map(c=>`<li><b>${esc(c.col)}</b>：${c.count} 件 — ${c.examples.map(esc).join(' ')}</li>`).join('')+'</ul>';
   if(R.norm.length) h+=`<h3>表記ゆれを自動で統一</h3><ul>`+R.norm.map(c=>`<li><b>${esc(c.col)}</b>：${c.count} 件（全角・半角、余分な空白）— ${c.examples.map(esc).join(' ')}</li>`).join('')+'</ul>';
   if(R.mixed.length||R.dupIds.length){
     h+='<h3>確認をおすすめ（除外はしていません）</h3><ul>';
@@ -1095,6 +1113,7 @@ function getOpts(a){
   o._d=DATA;
   return o;
 }
+const NO_NUM_MSG='<p class="warn">数値として読み取れる列がありません。「データ」タブの「列の一覧」で、各列が「数値」になっているか確認してください。1 行目が列名でない場合は「1行目は列名」のチェックを外してください。</p>';
 function renderForm(){
   const a=curAna(); document.getElementById('anaDesc').textContent=a.desc;
   const runBtn=document.getElementById('runBtn');
@@ -1109,8 +1128,9 @@ function renderForm(){
       const list=f.type==='num'?nums:all;
       h+=`<select data-k="${f.key}">`+(f.optional?`<option value="">${esc(f.none||'（なし）')}</option>`:'')+
         list.map(c=>{const col=colByName(c); return `<option value="${esc(c)}"${o[f.key]===c?' selected':''}>${esc(c)}${f.type==='cat'&&col.isNum?'（数値）':''}</option>`;}).join('')+'</select>';
-      if(f.type==='num'&&!nums.length) h+='<p class="warn">数値の列がありません。</p>';
+      if(f.type==='num'&&!nums.length) h+=NO_NUM_MSG;
     } else if(f.type==='nums'){
+      if(!nums.length) h+=NO_NUM_MSG;
       h+='<div class="checks">'+nums.map(c=>`<label><input type="checkbox" data-k="${f.key}" value="${esc(c)}"${o[f.key].includes(c)?' checked':''}> ${esc(c)}</label>`).join('')+'</div>';
       h+=`<div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn" data-all="${f.key}" style="padding:2px 8px;font-size:12px">全選択</button><button type="button" class="btn" data-none="${f.key}" style="padding:2px 8px;font-size:12px">全解除</button></div>`;
     } else if(f.type==='number'){
@@ -1176,19 +1196,89 @@ function loadText(t,{goAnalysis=false}={}){
 document.getElementById('applyBtn').onclick=()=>{ const t=rawText.value; if(!t.trim()){ setData(null); return; } loadText(t); };
 hasHeader.onchange=outlierSel.onchange=()=>{ if(rawText.value.trim()) loadText(LAST_TEXT||rawText.value); };
 let LAST_TEXT=null;
+let BOOK=null;
+const sheetSel=document.getElementById('sheetSel'), sheetWrap=document.getElementById('sheetWrap');
 async function readFile(file){
-  const buf=await file.arrayBuffer(); let t;
+  const buf=await file.arrayBuffer(), u8=new Uint8Array(buf.slice(0,8)); let t;
+  BOOK=null; sheetWrap.hidden=true;
+  if(u8[0]===0xD0&&u8[1]===0xCF&&u8[2]===0x11&&u8[3]===0xE0){ alert('古い Excel 形式（.xls）は読み込めません。Excel で「名前を付けて保存」→「Excel ブック（.xlsx）」または「CSV UTF-8」で保存し直してください。'); return; }
+  if(u8[0]===0x50&&u8[1]===0x4B){
+    try{ BOOK=await readXlsx(buf); }
+    catch(e){ console.error(e); alert('Excel ファイルを読み込めませんでした：'+e.message+'\nCSV で保存し直すと読み込めることがあります。'); return; }
+    if(!BOOK.length){ alert('データの入ったシートがありません。'); return; }
+    sheetSel.innerHTML=BOOK.map((s,i)=>`<option value="${i}">${esc(s.name)}</option>`).join('');
+    sheetWrap.hidden=BOOK.length<2;
+    // 説明用のシートなどを避け、いちばんデータの多いシートを開く
+    const cellsOf=t=>t.split('\n').reduce((a,l)=>a+l.split('\t').filter(c=>c.trim()).length,0);
+    let best=0; BOOK.forEach((b,i)=>{ if(cellsOf(b.text)>cellsOf(BOOK[best].text)) best=i; });
+    sheetSel.value=String(best);
+    loadText(BOOK[best].text); return;
+  }
   try{ t=new TextDecoder('utf-8',{fatal:true}).decode(buf); }
   catch(e){ try{ t=new TextDecoder('shift_jis').decode(buf); }catch(e2){ t=new TextDecoder('utf-8').decode(buf); } }
   loadText(t);
+}
+sheetSel.onchange=()=>{ if(BOOK) loadText(BOOK[+sheetSel.value].text); };
+/* .xlsx（ZIP + XML）をライブラリなしで読む。ブラウザ内蔵の DecompressionStream を使用 */
+async function readXlsx(buf){
+  const u8=new Uint8Array(buf), dv=new DataView(buf), dec=new TextDecoder();
+  let eocd=-1; for(let i=u8.length-22;i>=Math.max(0,u8.length-65600);i--) if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}
+  if(eocd<0) throw new Error('ZIP 形式ではありません');
+  const files={}; let off=dv.getUint32(eocd+16,true);
+  for(let k=0,n=dv.getUint16(eocd+10,true);k<n;k++){
+    if(dv.getUint32(off,true)!==0x02014b50) break;
+    const nl=dv.getUint16(off+28,true), xl=dv.getUint16(off+30,true), cl=dv.getUint16(off+32,true);
+    files[dec.decode(u8.subarray(off+46,off+46+nl))]={method:dv.getUint16(off+10,true),size:dv.getUint32(off+20,true),lho:dv.getUint32(off+42,true)};
+    off+=46+nl+xl+cl;
+  }
+  const get=async name=>{
+    name=name.replace(/^\//,''); const f=files[name]; if(!f) return null;
+    const l=f.lho, start=l+30+dv.getUint16(l+26,true)+dv.getUint16(l+28,true), data=u8.subarray(start,start+f.size);
+    if(f.method===0) return dec.decode(data);
+    if(f.method!==8) throw new Error('未対応の圧縮形式です');
+    if(typeof DecompressionStream==='undefined') throw new Error('このブラウザは Excel の読み込みに対応していません（最新の Chrome / Edge / Safari / Firefox をお使いください）');
+    return dec.decode(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  };
+  const xml=s=>new DOMParser().parseFromString(s,'application/xml');
+  const kids=(el,tag)=>[...el.getElementsByTagName('*')].filter(e=>e.localName===tag);
+  const wb=xml(await get('xl/workbook.xml')||''), rels=xml(await get('xl/_rels/workbook.xml.rels')||'<x/>');
+  const relMap={}; kids(rels,'Relationship').forEach(r=>relMap[r.getAttribute('Id')]=r.getAttribute('Target'));
+  const sst=[]; const ss=await get('xl/sharedStrings.xml');
+  if(ss) kids(xml(ss),'si').forEach(si=>{ sst.push(kids(si,'t').filter(t=>t.parentNode.localName!=='rPh').map(t=>t.textContent).join('')); });  // ふりがな（rPh）は除く
+  const out=[];
+  for(const sh of kids(wb,'sheet')){
+    const rid=[...sh.attributes].find(a=>a.localName==='id')?.value, target=relMap[rid]; if(!target) continue;
+    const path=target.startsWith('/')?target:'xl/'+target.replace(/^\.\//,'');
+    const sx=await get(path); if(!sx) continue;
+    const grid=[];
+    for(const row of kids(xml(sx),'row')){
+      const ri=(+row.getAttribute('r')||grid.length+1)-1, cells=grid[ri]=grid[ri]||[];
+      let ci=-1;
+      for(const c of kids(row,'c')){
+        const ref=c.getAttribute('r'); ci=ref?[...ref.replace(/\d+/g,'')].reduce((a,ch)=>a*26+ch.charCodeAt(0)-64,0)-1:ci+1;
+        const t=c.getAttribute('t'), v=kids(c,'v')[0]?.textContent??'';
+        let val;
+        if(t==='s') val=sst[+v]??'';
+        else if(t==='inlineStr') val=kids(c,'t').filter(x=>x.parentNode.localName!=='rPh').map(x=>x.textContent).join('');
+        else if(t==='b') val=v==='1'?'TRUE':'FALSE';
+        else if(t==='str'||t==='e') val=v;
+        else val=v===''?'':String(+(+v).toPrecision(15));
+        cells[ci]=val;
+      }
+    }
+    const q=x=>{ x=(x??'').replace(/[\t\r\n]+/g,' '); return x.includes('"')?'"'+x.replace(/"/g,'""')+'"':x; };   // 行番号を Excel の行番号とそろえるため、セル内改行は空白に
+    const text=Array.from(grid,r=>Array.from(r||[],q).join('\t')).join('\n');
+    if(text.trim()) out.push({name:sh.getAttribute('name'),text});
+  }
+  return out;
 }
 document.getElementById('fileInput').onchange=e=>{ const f=e.target.files[0]; if(f) readFile(f); e.target.value=''; };
 const drop=document.getElementById('drop');
 ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
 ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'||e.target===drop)drop.classList.remove('over');}));
 document.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f){ showView('data'); readFile(f); } });
-document.getElementById('clearBtn').onclick=()=>{ rawText.value=''; LAST_TEXT=null; setData(null); try{localStorage.removeItem('statlab.data');}catch(e){} };
-document.getElementById('sampleBtn').onclick=()=>{ hasHeader.checked=true; LAST_TEXT=null; loadText(sampleData()); };
+document.getElementById('clearBtn').onclick=()=>{ BOOK=null; sheetWrap.hidden=true; rawText.value=''; LAST_TEXT=null; setData(null); try{localStorage.removeItem('statlab.data');}catch(e){} };
+document.getElementById('sampleBtn').onclick=()=>{ BOOK=null; sheetWrap.hidden=true; hasHeader.checked=true; LAST_TEXT=null; loadText(sampleData()); };
 rawText.addEventListener('input',()=>{ LAST_TEXT=null; });
 
 function sampleData(){
