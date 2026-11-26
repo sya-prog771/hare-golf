@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>統計ラボ</title>
+<style id="mainStyle">
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1d2330; --muted:#5d6675; --line:#d5dae2; --grid:#e8ebf0;
+  --accent:#2f6fde; --accent-ink:#ffffff; --sig:#c0392b; --sig-bg:#fdeeee; --ns-bg:#eef3fb; --warn:#9a6700; --warn-bg:#fff6dd;
+  --c1:#3b73d9; --c2:#e07b39; --c3:#2e9e6a; --c4:#b04fc2; --c5:#c9a227; --c6:#d1495b;
+  --code:#f0f2f5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171c; --panel:#1c2027; --ink:#e7eaf0; --muted:#9aa3b2; --line:#343b47; --grid:#2a303a;
+    --accent:#6b9bff; --accent-ink:#0d1320; --sig:#ff8a7a; --sig-bg:#3a2220; --ns-bg:#1f2a3d; --warn:#ffcc66; --warn-bg:#3a3020;
+    --c1:#6b9bff; --c2:#ff9f5a; --c3:#4fd18f; --c4:#d58ce6; --c5:#f0cc4f; --c6:#ff7a8a;
+    --code:#262b34;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171c; --panel:#1c2027; --ink:#e7eaf0; --muted:#9aa3b2; --line:#343b47; --grid:#2a303a;
+  --accent:#6b9bff; --accent-ink:#0d1320; --sig:#ff8a7a; --sig-bg:#3a2220; --ns-bg:#1f2a3d; --warn:#ffcc66; --warn-bg:#3a3020;
+  --c1:#6b9bff; --c2:#ff9f5a; --c3:#4fd18f; --c4:#d58ce6; --c5:#f0cc4f; --c6:#ff7a8a;
+  --code:#262b34;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;font-size:14px;line-height:1.55}
+button,select,input,textarea{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top h1{font-size:17px;margin:0 8px 0 0;letter-spacing:.02em}
+.tabs{display:flex;gap:4px}
+.tabs button{border:1px solid var(--line);background:transparent;padding:6px 14px;border-radius:8px;cursor:pointer}
+.tabs button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#dataInfo{color:var(--muted);font-size:13px;margin-left:auto}
+#themeBtn{border:1px solid var(--line);background:transparent;border-radius:8px;padding:5px 9px;cursor:pointer}
+main{padding:16px;max-width:1400px;margin:0 auto}
+.view{display:none}
+.view.on{display:block}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.panel h2{font-size:15px;margin:0 0 10px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);padding:7px 14px;border-radius:8px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--muted);margin-bottom:10px}
+.drop.over{border-color:var(--accent);color:var(--accent)}
+textarea#rawText{width:100%;min-height:150px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre;overflow:auto}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;background:var(--bg)}
+.chip b{font-weight:600}
+.chip .t{color:var(--muted)}
+.tablewrap{overflow:auto;width:fit-content;max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 10px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th{background:var(--bg);font-weight:600;color:var(--muted)}
+td:first-child,th:first-child{text-align:left}
+td.l,th.l{text-align:left}
+tr.sig td{background:var(--sig-bg)}
+.preview th small{display:block;font-weight:400;font-size:11px}
+.preview td.miss{color:var(--muted)}
+.layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+aside.panel{position:sticky;top:70px;max-height:calc(100vh - 86px);overflow:auto}
+@media (max-width:860px){aside.panel{position:static;max-height:none}}
+.field{margin-bottom:12px}
+.field>label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
+.field select,.field input[type=number]{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.checks{display:flex;flex-direction:column;gap:2px;max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--bg)}
+.checks label,.inline{display:flex;gap:6px;align-items:center;cursor:pointer}
+#anaSelect{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-weight:600}
+#anaDesc{color:var(--muted);font-size:12.5px;margin:8px 0 14px}
+.outbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.empty{color:var(--muted);text-align:center;padding:40px 10px;border:1px dashed var(--line);border-radius:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+.card>header{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.card>header h3{margin:0;font-size:15px}
+.card>header .time{color:var(--muted);font-size:12px;margin-right:auto}
+.card>header button{border:1px solid var(--line);background:transparent;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px}
+.card h4{font-size:13px;margin:14px 0 6px;color:var(--muted)}
+.card .sub{color:var(--muted);font-size:12.5px;margin:0 0 6px}
+.verdict{padding:8px 12px;border-radius:8px;margin:10px 0;background:var(--ns-bg)}
+.verdict.sig{background:var(--sig-bg)}
+.verdict b{color:var(--ink)}
+.verdict.sig b{color:var(--sig)}
+.note{font-size:12px;color:var(--muted);margin:6px 0}
+.warn{font-size:12.5px;color:var(--warn);background:var(--warn-bg);padding:6px 10px;border-radius:8px;margin:8px 0}
+.err{color:var(--sig);background:var(--sig-bg);padding:8px 12px;border-radius:8px}
+.charts{display:flex;flex-wrap:wrap;gap:12px}
+.chart{width:100%;max-width:560px;height:auto;display:block}
+.charts .chart{flex:1 1 380px}
+.chart text{fill:var(--muted);font-size:11px;font-family:inherit}
+.chart text.lab{fill:var(--ink);font-size:12px}
+.chart text.ttl{fill:var(--ink);font-size:12px;font-weight:600}
+.chart .grid{stroke:var(--grid);stroke-width:1}
+.chart .axis{stroke:var(--line);stroke-width:1}
+.chart .ref{stroke:var(--muted);stroke-width:1.2;stroke-dasharray:4 3;fill:none}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin-top:4px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.help{font-size:13px;color:var(--muted)}
+.help li{margin:3px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:12px}
+.star{color:var(--sig);font-weight:700}
+@media print{
+  .top,aside,.outbar,#view-data,.card>header button{display:none!important}
+  .layout{display:block}
+  .view{display:block}
+  body{background:#fff}
+  .card{break-inside:avoid;border-color:#ccc}
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>📊 統計ラボ</h1>
+  <div class="tabs">
+    <button data-view="data" class="on">データ</button>
+    <button data-view="analysis">分析</button>
+  </div>
+  <span id="dataInfo">データ未読み込み</span>
+  <button id="themeBtn" title="表示テーマを切り替え">🌓</button>
+</div>
+
+<main>
+<!-- ============ データ ============ -->
+<section id="view-data" class="view on">
+  <div class="panel">
+    <h2>1. データを読み込む</h2>
+    <div class="toolbar">
+      <label class="btn primary">📂 CSV / TSV / テキストを開く<input type="file" id="fileInput" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden></label>
+      <button class="btn" id="sampleBtn">サンプルデータを使う</button>
+      <button class="btn" id="clearBtn">データを消去</button>
+      <label class="inline"><input type="checkbox" id="hasHeader" checked> 1行目は列名</label>
+    </div>
+    <div class="drop" id="drop">ここにファイルをドラッグ＆ドロップ、または下の欄に Excel の表をそのまま貼り付けて「反映」</div>
+    <textarea id="rawText" spellcheck="false" placeholder="例）&#10;性別,年齢,身長&#10;男,23,172.5&#10;女,31,158.0"></textarea>
+    <div class="toolbar" style="margin-top:8px;margin-bottom:0">
+      <button class="btn primary" id="applyBtn">反映</button>
+      <span class="note">区切り文字（カンマ・タブ・セミコロン）は自動判定。Shift_JIS の CSV もそのまま開けます。空欄・NA・欠損 は欠損値として扱います。</span>
+    </div>
+  </div>
+
+  <div class="panel" id="summaryPanel" hidden>
+    <h2>2. 列の一覧</h2>
+    <div class="chips" id="colSummary"></div>
+    <p class="note">数値以外を含む列は「カテゴリ」（グループ分けに使う列）として扱います。数値の列もグループ列として選べます。</p>
+  </div>
+
+  <div class="panel" id="previewPanel" hidden>
+    <h2>3. プレビュー <span class="note" id="previewNote"></span></h2>
+    <div class="tablewrap preview" id="preview"></div>
+  </div>
+
+  <div class="panel help">
+    <h2>使い方</h2>
+    <ol>
+      <li>1行が1人（1ケース）、1列が1つの変数になるようにデータを用意します（いわゆる「縦長」形式）。</li>
+      <li>「分析」タブで手法を選び、列を指定して「実行」を押すと、右側に結果が追加されていきます。</li>
+      <li>グループの比較は「値の列＋グループ列」でも「比較したい列を複数選ぶ」でも実行できます。</li>
+      <li>結果は「表をコピー」で Excel に貼り付けられます。「HTMLで保存」「印刷」でまとめて残せます。</li>
+      <li>このファイルはインターネットに接続せずに動作し、データが外部に送信されることはありません。読み込んだデータはこのブラウザ内にだけ保存されます。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ 分析 ============ -->
+<section id="view-analysis" class="view">
+  <div class="layout">
+    <aside class="panel">
+      <select id="anaSelect"></select>
+      <div id="anaDesc"></div>
+      <form id="anaForm" onsubmit="return false"></form>
+      <div class="field">
+        <label>有意水準 α</label>
+        <select id="alphaSel"><option value="0.05" selected>0.05（信頼区間 95%）</option><option value="0.01">0.01（信頼区間 99%）</option><option value="0.1">0.10（信頼区間 90%）</option></select>
+      </div>
+      <button class="btn primary" id="runBtn" style="width:100%;justify-content:center">▶ 実行</button>
+    </aside>
+    <div>
+      <div class="outbar">
+        <button class="btn" id="saveBtn">💾 結果をHTMLで保存</button>
+        <button class="btn" id="printBtn">🖨 印刷 / PDF</button>
+        <button class="btn" id="clearOutBtn">結果をすべて消去</button>
+      </div>
+      <div id="results"><div class="empty" id="emptyMsg">左で分析を選んで「実行」すると、ここに結果が表示されます。</div></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+'use strict';
+/* =====================================================================
+   数学・分布関数
+   ===================================================================== */
+const LG=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+function lgamma(x){
+  if(x<0.5) return Math.log(Math.PI/Math.abs(Math.sin(Math.PI*x)))-lgamma(1-x);
+  x-=1; let a=LG[0]; const t=x+7.5;
+  for(let i=1;i<9;i++) a+=LG[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
+}
+function betacf(a,b,x){
+  const FP=1e-300; const qab=a+b,qap=a+1,qam=a-1;
+  let c=1,d=1-qab*x/qap; if(Math.abs(d)<FP)d=FP; d=1/d; let h=d;
+  for(let m=1;m<=500;m++){
+    const m2=2*m;
+    let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d; if(Math.abs(d)<FP)d=FP; c=1+aa/c; if(Math.abs(c)<FP)c=FP; d=1/d; h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d; if(Math.abs(d)<FP)d=FP; c=1+aa/c; if(Math.abs(c)<FP)c=FP; d=1/d;
+    const del=d*c; h*=del; if(Math.abs(del-1)<1e-15) break;
+  }
+  return h;
+}
+/* 正則化不完全ベータ関数 I_x(a,b) */
+function ibeta(x,a,b){
+  if(x<=0) return 0; if(x>=1) return 1;
+  const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2) ? bt*betacf(a,b,x)/a : 1-bt*betacf(b,a,1-x)/b;
+}
+/* 正則化不完全ガンマ関数：上側 Q(a,x) */
+function gammq(a,x){
+  if(x<=0) return 1;
+  if(!isFinite(x)) return 0;
+  if(x<a+1){
+    let ap=a,sum=1/a,del=sum;
+    for(let n=0;n<2000;n++){ap++;del*=x/ap;sum+=del;if(Math.abs(del)<Math.abs(sum)*1e-16)break;}
+    return 1-sum*Math.exp(-x+a*Math.log(x)-lgamma(a));
+  }
+  let b=x+1-a,c=1e300,d=1/b,h=d;
+  for(let i=1;i<2000;i++){
+    const an=-i*(i-a); b+=2; d=an*d+b; if(Math.abs(d)<1e-300)d=1e-300;
+    c=b+an/c; if(Math.abs(c)<1e-300)c=1e-300; d=1/d; const del=d*c; h*=del; if(Math.abs(del-1)<1e-16)break;
+  }
+  return Math.exp(-x+a*Math.log(x)-lgamma(a))*h;
+}
+function normCdf(z){ if(!isFinite(z)) return z>0?1:0; const q=0.5*gammq(0.5,z*z/2); return z<0?q:1-q; }
+function normUpper(z){ return normCdf(-z); }
+function normInv(p){
+  if(p<=0) return -Infinity; if(p>=1) return Infinity;
+  const a=[-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+  const b=[-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+  const c=[-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+  const d=[7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+  const pl=0.02425; let q,r,x;
+  if(p<pl){q=Math.sqrt(-2*Math.log(p));x=(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  else if(p<=1-pl){q=p-0.5;r=q*q;x=(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+  else {q=Math.sqrt(-2*Math.log(1-p));x=-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  const e=normCdf(x)-p, u=e*Math.sqrt(2*Math.PI)*Math.exp(x*x/2);
+  return x-u/(1+x*u/2);
+}
+function tCdf(t,df){ const tail=0.5*ibeta(df/(df+t*t),df/2,0.5); return t>0?1-tail:tail; }
+function tP2(t,df){ if(!isFinite(t)) return 0; return ibeta(df/(df+t*t),df/2,0.5); }   // 両側p
+function tInv(p,df){
+  let lo=-1,hi=1;
+  while(tCdf(lo,df)>p) lo*=2;
+  while(tCdf(hi,df)<p) hi*=2;
+  for(let i=0;i<200;i++){const m=(lo+hi)/2; if(tCdf(m,df)<p) lo=m; else hi=m; if(hi-lo<1e-12) break;}
+  return (lo+hi)/2;
+}
+function fUpper(F,d1,d2){ if(!(F>0)) return 1; if(!isFinite(F)) return 0; return ibeta(d2/(d2+d1*F),d2/2,d1/2); }
+function chi2Upper(x,k){ return gammq(k/2,x/2); }
+function poly(c,x){ let r=0; for(let i=c.length-1;i>=0;i--) r=r*x+c[i]; return r; }
+
+/* =====================================================================
+   基本統計
+   ===================================================================== */
+const sum=a=>{let s=0;for(const v of a)s+=v;return s;};
+const mean=a=>sum(a)/a.length;
+function variance(a){ const m=mean(a); let s=0; for(const v of a) s+=(v-m)*(v-m); return s/(a.length-1); }
+const sd=a=>Math.sqrt(variance(a));
+function quantile(sorted,p){ const n=sorted.length; if(!n) return NaN; const h=(n-1)*p, lo=Math.floor(h); return lo+1<n ? sorted[lo]+(h-lo)*(sorted[lo+1]-sorted[lo]) : sorted[lo]; }
+function median(a){ return quantile([...a].sort((x,y)=>x-y),0.5); }
+function describe(a,alpha){
+  const n=a.length, s=[...a].sort((x,y)=>x-y);
+  const o={n, min:s[0], max:s[n-1], q1:quantile(s,.25), med:quantile(s,.5), q3:quantile(s,.75)};
+  o.mean=n?mean(a):NaN; o.sd=n>1?sd(a):NaN; o.var=o.sd*o.sd; o.se=o.sd/Math.sqrt(n);
+  if(n>1){ const tc=tInv(1-alpha/2,n-1); o.ciLo=o.mean-tc*o.se; o.ciHi=o.mean+tc*o.se; } else {o.ciLo=o.ciHi=NaN;}
+  if(n>2 && o.sd>0){ let s3=0; for(const v of a) s3+=((v-o.mean)/o.sd)**3; o.skew=n/((n-1)*(n-2))*s3; } else o.skew=NaN;
+  if(n>3 && o.sd>0){ let s4=0; for(const v of a) s4+=((v-o.mean)/o.sd)**4; o.kurt=n*(n+1)/((n-1)*(n-2)*(n-3))*s4-3*(n-1)**2/((n-2)*(n-3)); } else o.kurt=NaN;
+  return o;
+}
+/* 順位（同順位は平均順位） */
+function rank(arr){
+  const idx=arr.map((v,i)=>[v,i]).sort((p,q)=>p[0]-q[0]); const r=new Array(arr.length); let ties=0;
+  for(let i=0;i<idx.length;){ let j=i; while(j+1<idx.length&&idx[j+1][0]===idx[i][0]) j++;
+    const avg=(i+j)/2+1; for(let k=i;k<=j;k++) r[idx[k][1]]=avg; const t=j-i+1; if(t>1) ties+=t*t*t-t; i=j+1; }
+  return {r,ties};
+}
+function pearson(x,y){
+  const n=x.length, mx=mean(x), my=mean(y); let sxy=0,sxx=0,syy=0;
+  for(let i=0;i<n;i++){const dx=x[i]-mx,dy=y[i]-my; sxy+=dx*dy; sxx+=dx*dx; syy+=dy*dy;}
+  return sxy/Math.sqrt(sxx*syy);
+}
+function corrTest(r,n){ if(n<3||!isFinite(r)) return {t:NaN,p:NaN}; if(Math.abs(r)>=1) return {t:Infinity,p:0}; const t=r*Math.sqrt((n-2)/(1-r*r)); return {t,p:tP2(t,n-2)}; }
+function holm(ps){
+  const m=ps.length, o=ps.map((p,i)=>[p,i]).sort((a,b)=>a[0]-b[0]), adj=new Array(m); let run=0;
+  o.forEach(([p,i],k)=>{ run=Math.max(run,Math.min(1,(m-k)*p)); adj[i]=run; });
+  return adj;
+}
+function anova1(groups){
+  const all=groups.flat(), N=all.length, k=groups.length, gm=mean(all);
+  let ssb=0,ssw=0;
+  for(const g of groups){ const m=mean(g); ssb+=g.length*(m-gm)**2; for(const v of g) ssw+=(v-m)**2; }
+  const dfb=k-1, dfw=N-k, msb=ssb/dfb, msw=ssw/dfw, F=msb/msw;
+  return {ssb,ssw,sst:ssb+ssw,dfb,dfw,msb,msw,F,p:fUpper(F,dfb,dfw),eta2:ssb/(ssb+ssw),omega2:(ssb-dfb*msw)/(ssb+ssw+msw),N,k};
+}
+function levene(groups){ // Brown–Forsythe（中央値版）
+  return anova1(groups.map(g=>{const md=median(g); return g.map(v=>Math.abs(v-md));}));
+}
+function welchAnova(groups){
+  const k=groups.length; const st=groups.map(g=>({n:g.length,m:mean(g),v:variance(g)}));
+  if(st.some(s=>!(s.v>0))) return null;
+  const w=st.map(s=>s.n/s.v), W=sum(w), mw=sum(st.map((s,i)=>w[i]*s.m))/W;
+  const A=sum(st.map((s,i)=>w[i]*(s.m-mw)**2))/(k-1);
+  const tmp=sum(st.map((s,i)=>(1-w[i]/W)**2/(s.n-1)));
+  const B=1+2*(k-2)/(k*k-1)*tmp, F=A/B, df2=(k*k-1)/(3*tmp);
+  return {F,df1:k-1,df2,p:fUpper(F,k-1,df2)};
+}
+function shapiro(x){
+  const n=x.length; if(n<3||n>5000) return null;
+  const s=[...x].sort((a,b)=>a-b), m0=mean(s); let ssq=0; for(const v of s) ssq+=(v-m0)**2; if(!(ssq>0)) return null;
+  const m=[]; for(let i=0;i<n;i++) m.push(normInv((i+1-0.375)/(n+0.25)));
+  const summ2=sum(m.map(v=>v*v)), ssumm2=Math.sqrt(summ2), u=1/Math.sqrt(n), a=new Array(n).fill(0);
+  if(n===3){ a[0]=-Math.SQRT1_2; a[2]=Math.SQRT1_2; }
+  else{
+    const an=m[n-1]/ssumm2+poly([0,0.221157,-0.147981,-2.071190,4.434685,-2.706056],u);
+    let phi,i1;
+    if(n>5){
+      const an1=m[n-2]/ssumm2+poly([0,0.042981,-0.293762,-1.752461,5.682633,-3.582633],u);
+      phi=(summ2-2*m[n-1]**2-2*m[n-2]**2)/(1-2*an**2-2*an1**2);
+      a[n-1]=an;a[0]=-an;a[n-2]=an1;a[1]=-an1;i1=2;
+    } else { phi=(summ2-2*m[n-1]**2)/(1-2*an**2); a[n-1]=an;a[0]=-an;i1=1; }
+    const sp=Math.sqrt(phi); for(let i=i1;i<n-i1;i++) a[i]=m[i]/sp;
+  }
+  let num=0; for(let i=0;i<n;i++) num+=a[i]*s[i];
+  let W=Math.min(1,num*num/ssq), p;
+  if(n===3){ p=Math.max(0,Math.min(1,6/Math.PI*(Math.asin(Math.sqrt(W))-Math.asin(Math.sqrt(0.75))))); }
+  else{
+    const w1=Math.log(1-W); let z;
+    if(n<=11){
+      const g=poly([-2.273,0.459],n);
+      if(w1>=g) return {W,p:0};
+      const y=-Math.log(g-w1), mm=poly([0.5440,-0.39978,0.025054,-6.714e-4],n), ss=Math.exp(poly([1.3822,-0.77857,0.062767,-0.0020322],n));
+      z=(y-mm)/ss;
+    } else {
+      const L=Math.log(n), mm=poly([-1.5861,-0.31082,-0.083751,0.0038915],L), ss=Math.exp(poly([-0.4803,-0.082676,0.0030302],L));
+      z=(w1-mm)/ss;
+    }
+    p=normUpper(z);
+  }
+  return {W,p};
+}
+function invert(A){
+  const n=A.length, M=A.map((r,i)=>[...r,...Array.from({length:n},(_,j)=>i===j?1:0)]);
+  for(let c=0;c<n;c++){
+    let piv=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[piv][c])) piv=r;
+    if(Math.abs(M[piv][c])<1e-12*Math.max(1,Math.abs(A[c][c]))) throw new Error('説明変数どうしが完全に相関している（多重共線性）か、値が一定の列があります。');
+    [M[c],M[piv]]=[M[piv],M[c]];
+    const d=M[c][c]; for(let j=0;j<2*n;j++) M[c][j]/=d;
+    for(let r=0;r<n;r++) if(r!==c){ const f=M[r][c]; if(f) for(let j=0;j<2*n;j++) M[r][j]-=f*M[c][j]; }
+  }
+  return M.map(r=>r.slice(n));
+}
+function ols(y,X){ // X は切片列を含む
+  const n=y.length,p=X[0].length;
+  const XtX=Array.from({length:p},()=>new Array(p).fill(0)), Xty=new Array(p).fill(0);
+  for(let i=0;i<n;i++) for(let a=0;a<p;a++){ Xty[a]+=X[i][a]*y[i]; for(let b=0;b<p;b++) XtX[a][b]+=X[i][a]*X[i][b]; }
+  const inv=invert(XtX), b=inv.map(r=>sum(r.map((v,j)=>v*Xty[j])));
+  const fit=X.map(r=>sum(r.map((v,j)=>v*b[j]))), res=y.map((v,i)=>v-fit[i]);
+  const my=mean(y), sse=sum(res.map(r=>r*r)), sst=sum(y.map(v=>(v-my)**2)), dfr=n-p, mse=sse/dfr;
+  return {b,se:inv.map((r,i)=>Math.sqrt(mse*r[i])),fit,res,sse,sst,ssr:sst-sse,dfr,dfm:p-1,mse,r2:1-sse/sst,n,p};
+}
+function fisher2x2(a,b,c,d){
+  const r1=a+b,r2=c+d,c1=a+c,n=r1+r2,lf=k=>lgamma(k+1);
+  const pr=x=>Math.exp(lf(r1)+lf(r2)+lf(c1)+lf(n-c1)-lf(n)-lf(x)-lf(r1-x)-lf(c1-x)-lf(r2-c1+x));
+  const p0=pr(a); let p=0;
+  for(let x=Math.max(0,c1-r2);x<=Math.min(r1,c1);x++){ const px=pr(x); if(px<=p0*(1+1e-7)) p+=px; }
+  return Math.min(1,p);
+}
+
+/* =====================================================================
+   データ管理
+   ===================================================================== */
+const MISSING=new Set(['','na','n/a','nan','null','.','-','欠損','－','―']);
+const isMissing=s=>MISSING.has(String(s).trim().toLowerCase());
+function toNum(s){
+  s=String(s).trim().replace(/[０-９．－＋ｅＥ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/^\+/,'');
+  if(s===''||isMissing(s)) return NaN;
+  if(!/^[-]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) return null;
+  return Number(s);
+}
+let DATA=null; // {cols:[{name,raw,num,isNum,missing}], n}
+
+function parseText(text){
+  text=text.replace(/^﻿/,'');
+  const firstLines=text.split(/\r?\n/).filter(l=>l.trim()).slice(0,5);
+  let delim=',';
+  if(firstLines.length){
+    let best=-1;
+    for(const d of ['\t',',',';']){ const cnt=Math.min(...firstLines.map(l=>l.split(d).length)); if(cnt>best){best=cnt;delim=d;} }
+    if(best<=1 && /\s{1,}/.test(firstLines[0].trim())) delim='ws';
+  }
+  const rows=[];
+  if(delim==='ws'){ for(const l of text.split(/\r?\n/)) if(l.trim()) rows.push(l.trim().split(/\s+/)); return rows; }
+  let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=ch; }
+    else if(ch==='"'&&f.trim()===''){ q=true; f=''; }
+    else if(ch===delim){ row.push(f); f=''; }
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=''; }
+    else f+=ch;
+  }
+  if(f!==''||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+function buildData(text,hasHeader){
+  const rows=parseText(text);
+  if(!rows.length) return null;
+  const w=Math.max(...rows.map(r=>r.length));
+  let names=hasHeader?rows.shift().map(s=>s.trim()):[];
+  const seen={};
+  names=Array.from({length:w},(_,i)=>{ let nm=(names[i]||'').trim()||('V'+(i+1)); if(seen[nm]){ seen[nm]++; nm=nm+'_'+seen[nm]; } else seen[nm]=1; return nm; });
+  const cols=names.map((name,j)=>{
+    const raw=rows.map(r=>(r[j]??'').trim());
+    const nums=raw.map(toNum);
+    const nonMiss=nums.filter(v=>v===null||!Number.isNaN(v));
+    const isNum=nonMiss.length>0 && nonMiss.every(v=>v!==null);
+    return {name,raw,num:isNum?nums:null,isNum,missing:raw.filter(isMissing).length};
+  });
+  return {cols,n:rows.length};
+}
+const colByName=n=>DATA&&DATA.cols.find(c=>c.name===n);
+const numCols=()=>DATA?DATA.cols.filter(c=>c.isNum).map(c=>c.name):[];
+const allCols=()=>DATA?DATA.cols.map(c=>c.name):[];
+const catCols=()=>DATA?DATA.cols.filter(c=>!c.isNum).map(c=>c.name):[];
+/* 既定値の候補：ID のような連番の列は除く */
+function defNums(){
+  const out=DATA?DATA.cols.filter(c=>c.isNum&&!(/^(id|no\.?|番号|ｉｄ)$/i.test(c.name)||c.num.every((v,i)=>v===i+1||v===i))).map(c=>c.name):[];
+  return out.length?out:numCols();
+}
+function numOf(name){ const c=colByName(name); if(!c||!c.isNum) throw new Error(`列「${name}」は数値の列ではありません。`); return c.num; }
+function rawOf(name){ const c=colByName(name); if(!c) throw new Error(`列「${name}」が見つかりません。`); return c.raw; }
+const natSort=(a,b)=>String(a).localeCompare(String(b),'ja',{numeric:true});
+function groupsOf(valueCol,groupCol){
+  const v=numOf(valueCol), g=rawOf(groupCol), map=new Map();
+  for(let i=0;i<v.length;i++){ const gi=g[i]; if(isMissing(gi)||!Number.isFinite(v[i])) continue; if(!map.has(gi)) map.set(gi,[]); map.get(gi).push(v[i]); }
+  return [...map.entries()].sort((a,b)=>natSort(a[0],b[0])).map(([name,v])=>({name,v}));
+}
+function getGroups(o){
+  if(o.group) return groupsOf(o.value,o.group);
+  return (o.cols||[]).map(c=>({name:c,v:numOf(c).filter(Number.isFinite)}));
+}
+function pairs(a,b){ const x=numOf(a),y=numOf(b),X=[],Y=[]; for(let i=0;i<x.length;i++) if(Number.isFinite(x[i])&&Number.isFinite(y[i])){X.push(x[i]);Y.push(y[i]);} return [X,Y]; }
+
+function setData(d,rawText){
+  DATA=d;
+  const info=document.getElementById('dataInfo');
+  const sp=document.getElementById('summaryPanel'), pp=document.getElementById('previewPanel');
+  if(!d){ info.textContent='データ未読み込み'; sp.hidden=pp.hidden=true; renderForm(); return; }
+  info.textContent=`${d.n} 行 × ${d.cols.length} 列`;
+  sp.hidden=pp.hidden=false;
+  document.getElementById('colSummary').innerHTML=d.cols.map(c=>{
+    const valid=d.n-c.missing;
+    let extra='';
+    if(c.isNum){ const v=c.num.filter(Number.isFinite); extra=` 平均 ${fmt(mean(v),2)}`; }
+    else { extra=` ${new Set(c.raw.filter(s=>!isMissing(s))).size} 種類`; }
+    return `<span class="chip"><b>${esc(c.name)}</b> <span class="t">${c.isNum?'数値':'カテゴリ'} · n=${valid}${c.missing?` · 欠損 ${c.missing}`:''} ·${esc(extra)}</span></span>`;
+  }).join('');
+  const show=Math.min(d.n,200);
+  let h='<table><thead><tr><th>#</th>'+d.cols.map(c=>`<th class="${c.isNum?'':'l'}">${esc(c.name)}<small>${c.isNum?'数値':'カテゴリ'}</small></th>`).join('')+'</tr></thead><tbody>';
+  for(let i=0;i<show;i++){
+    h+=`<tr><td>${i+1}</td>`+d.cols.map(c=>{const s=c.raw[i]; return isMissing(s)?'<td class="miss">·</td>':`<td class="${c.isNum?'':'l'}">${esc(s)}</td>`;}).join('')+'</tr>';
+  }
+  h+='</tbody></table>';
+  document.getElementById('preview').innerHTML=h;
+  document.getElementById('previewNote').textContent=d.n>show?`（先頭 ${show} 行を表示）`:'';
+  if(rawText!=null){ try{ if(rawText.length<3e6) localStorage.setItem('statlab.data',JSON.stringify({t:rawText,h:document.getElementById('hasHeader').checked})); }catch(e){} }
+  renderForm();
+}
+
+/* =====================================================================
+   書式・出力
+   ===================================================================== */
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(x,d=3){
+  if(x==null||typeof x!=='number'||!isFinite(x)) return x===Infinity?'∞':'—';
+  const ax=Math.abs(x);
+  if(ax!==0&&(ax>=1e7||ax<1e-4)) return x.toExponential(2);
+  return x.toFixed(d);
+}
+const fmtInt=x=>Number.isFinite(x)?String(Math.round(x)):'—';
+function fmtDf(x){ return Number.isInteger(x)?String(x):fmt(x,2); }
+function fp(p){ if(!Number.isFinite(p)) return '—'; if(p<0.001) return '< .001'; return p.toFixed(3).replace(/^0/,''); }
+function pText(p){ return p<0.001?'p < .001':`p = ${fp(p)}`; }
+function stars(p){ return p<.001?'***':p<.01?'**':p<.05?'*':p<.1?'†':''; }
+function pCell(p){ return `${fp(p)} <span class="star">${stars(p)}</span>`; }
+function table(head,rows,opt={}){
+  const sigCol=opt.sigCol;
+  let h='<div class="tablewrap"><table><thead><tr>'+head.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+  for(const r of rows){
+    const sig=sigCol!=null&&r._p!=null&&r._p<ALPHA();
+    h+=`<tr${sig?' class="sig"':''}>`+r.map(c=>`<td>${c}</td>`).join('')+'</tr>';
+  }
+  return h+'</tbody></table></div>';
+}
+function rowP(arr,p){ arr._p=p; return arr; }
+const ALPHA=()=>parseFloat(document.getElementById('alphaSel').value);
+const CIPCT=()=>Math.round((1-ALPHA())*100);
+function verdict(p,sigMsg,nsMsg,stat){
+  const sig=p<ALPHA();
+  return `<p class="verdict ${sig?'sig':''}">${sig?`<b>有意水準 ${ALPHA()} で有意です。</b> ${sigMsg}`:`<b>有意ではありません。</b> ${nsMsg}`}${stat?`（${stat}）`:''}</p>`;
+}
+let cardSeq=0;
+function addCard(title,body){
+  document.getElementById('emptyMsg')?.remove();
+  const el=document.createElement('article'); el.className='card'; el.id='card'+(++cardSeq);
+  const t=new Date();
+  el.innerHTML=`<header><h3>${esc(title)}</h3><span class="time">${t.toLocaleString('ja-JP')}</span><button class="copy" type="button">表をコピー</button><button class="del" type="button" title="この結果を削除">×</button></header>${body}`;
+  el.querySelector('.del').onclick=()=>{ el.remove(); if(!document.querySelector('#results .card')) document.getElementById('results').innerHTML='<div class="empty" id="emptyMsg">左で分析を選んで「実行」すると、ここに結果が表示されます。</div>'; };
+  el.querySelector('.copy').onclick=e=>copyTables(el,e.target);
+  document.getElementById('results').appendChild(el);
+  el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function copyTables(el,btn){
+  const txt=[...el.querySelectorAll('table')].map(t=>[...t.rows].map(r=>[...r.cells].map(c=>c.innerText.replace(/\s+/g,' ').trim()).join('\t')).join('\n')).join('\n\n');
+  const done=()=>{ const o=btn.textContent; btn.textContent='コピーしました'; setTimeout(()=>btn.textContent=o,1400); };
+  if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(txt).then(done,()=>fallbackCopy(txt,done));
+  else fallbackCopy(txt,done);
+}
+function fallbackCopy(txt,done){ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');done();}catch(e){alert('コピーできませんでした');} ta.remove(); }
+
+/* =====================================================================
+   グラフ（SVG）
+   ===================================================================== */
+const W=560,H=320,M={l:60,r:18,t:22,b:50};
+const COL=i=>`var(--c${i%6+1})`;
+function scale(d0,d1,r0,r1){ const k=(r1-r0)/((d1-d0)||1); return v=>r0+(v-d0)*k; }
+function ticks(min,max,n=5){
+  if(!isFinite(min)||!isFinite(max)) return [0,1];
+  if(min===max){ const d=Math.abs(min)*0.1||1; min-=d; max+=d; }
+  const step0=(max-min)/n, mag=10**Math.floor(Math.log10(step0)), r=step0/mag;
+  const step=(r<1.5?1:r<3?2:r<7?5:10)*mag;
+  const out=[]; for(let v=Math.floor(min/step+1e-9)*step; v<=max+step*0.999; v+=step) out.push(+v.toPrecision(12));
+  if(out[out.length-1]<max) out.push(+(out[out.length-1]+step).toPrecision(12));
+  return out;
+}
+const tl=v=>{ const s=String(+v.toPrecision(6)); return Math.abs(v)>=1e6?v.toExponential(1):s; };
+const svgOpen=(label,h=H)=>`<svg class="chart" viewBox="0 0 ${W} ${h}" role="img" aria-label="${esc(label)}">`;
+function frame(xs,ys,xt,yt,xl,yl,title,h=H){
+  let s='';
+  for(const v of yt) s+=`<line class="grid" x1="${M.l}" x2="${W-M.r}" y1="${ys(v)}" y2="${ys(v)}"/><text x="${M.l-6}" y="${ys(v)+4}" text-anchor="end">${tl(v)}</text>`;
+  if(xt) for(const v of xt) s+=`<line class="axis" x1="${xs(v)}" x2="${xs(v)}" y1="${h-M.b}" y2="${h-M.b+4}"/><text x="${xs(v)}" y="${h-M.b+17}" text-anchor="middle">${tl(v)}</text>`;
+  s+=`<line class="axis" x1="${M.l}" x2="${W-M.r}" y1="${h-M.b}" y2="${h-M.b}"/>`;
+  if(xl) s+=`<text class="lab" x="${(M.l+W-M.r)/2}" y="${h-10}" text-anchor="middle">${esc(xl)}</text>`;
+  if(yl) s+=`<text class="lab" transform="translate(14 ${(M.t+h-M.b)/2}) rotate(-90)" text-anchor="middle">${esc(yl)}</text>`;
+  if(title) s+=`<text class="ttl" x="${M.l}" y="14">${esc(title)}</text>`;
+  return s;
+}
+function histSVG(v,{bins=0,normal=true,label='',title=''}={}){
+  const n=v.length; let mn=Math.min(...v), mx=Math.max(...v);
+  let k=bins>0?bins:Math.max(1,Math.ceil(Math.log2(n)+1));
+  if(mn===mx){ mn-=0.5; mx+=0.5; k=1; }
+  const w=(mx-mn)/k, cnt=new Array(k).fill(0);
+  for(const x of v) cnt[Math.min(k-1,Math.floor((x-mn)/w))]++;
+  const m=mean(v), s=n>1?sd(v):0; let ymax=Math.max(...cnt);
+  if(normal&&s>0) ymax=Math.max(ymax,n*w/(s*Math.sqrt(2*Math.PI)));
+  const xt=ticks(mn,mx), yt=ticks(0,ymax);
+  const xs=scale(xt[0],xt[xt.length-1],M.l,W-M.r), ys=scale(0,yt[yt.length-1],H-M.b,M.t);
+  let g=svgOpen('ヒストグラム '+label)+frame(xs,ys,xt,yt,label,'度数',title);
+  cnt.forEach((c,i)=>{ const x0=xs(mn+i*w), x1=xs(mn+(i+1)*w); g+=`<rect x="${x0+0.5}" y="${ys(c)}" width="${Math.max(0.5,x1-x0-1)}" height="${ys(0)-ys(c)}" style="fill:var(--c1);opacity:.8"><title>${tl(mn+i*w)}〜${tl(mn+(i+1)*w)}: ${c}</title></rect>`; });
+  if(normal&&s>0){
+    let d=''; const a=xt[0], b=xt[xt.length-1];
+    for(let i=0;i<=120;i++){ const x=a+(b-a)*i/120, y=n*w*Math.exp(-(((x-m)/s)**2)/2)/(s*Math.sqrt(2*Math.PI)); d+=(i?'L':'M')+xs(x).toFixed(1)+' '+ys(y).toFixed(1); }
+    g+=`<path d="${d}" style="fill:none;stroke:var(--c2);stroke-width:2"/>`;
+  }
+  return g+'</svg>';
+}
+function boxStats(v){
+  const s=[...v].sort((a,b)=>a-b), q1=quantile(s,.25), q3=quantile(s,.75), iqr=q3-q1, lo=q1-1.5*iqr, hi=q3+1.5*iqr;
+  const inside=s.filter(x=>x>=lo&&x<=hi);
+  return {q1,q3,med:quantile(s,.5),mean:mean(s),wlo:inside[0],whi:inside[inside.length-1],out:s.filter(x=>x<lo||x>hi)};
+}
+function catAxis(names,xs,band,h=H){
+  const rot=names.length>6||names.some(n=>String(n).length>8);
+  return names.map((n,i)=>{ const label=String(n).length>12?String(n).slice(0,11)+'…':String(n); const x=xs(i);
+    return rot?`<text transform="translate(${x} ${h-M.b+12}) rotate(-30)" text-anchor="end">${esc(label)}</text>`:`<text x="${x}" y="${h-M.b+17}" text-anchor="middle">${esc(label)}</text>`; }).join('');
+}
+function boxSVG(groups,{ylabel='',title=''}={}){
+  const st=groups.map(g=>boxStats(g.v)), allv=groups.flatMap(g=>g.v);
+  const yt=ticks(Math.min(...allv),Math.max(...allv)), ys=scale(yt[0],yt[yt.length-1],H-M.b,M.t);
+  const k=groups.length, band=(W-M.l-M.r)/k, xs=i=>M.l+band*(i+0.5), bw=Math.min(56,band*0.5);
+  let g=svgOpen('箱ひげ図')+frame(null,ys,null,yt,'',ylabel,title)+catAxis(groups.map(g=>g.name),xs,band);
+  st.forEach((s,i)=>{
+    const x=xs(i), c=COL(i);
+    g+=`<line x1="${x}" x2="${x}" y1="${ys(s.whi)}" y2="${ys(s.q3)}" style="stroke:${c};stroke-width:1.5"/><line x1="${x}" x2="${x}" y1="${ys(s.q1)}" y2="${ys(s.wlo)}" style="stroke:${c};stroke-width:1.5"/>`;
+    g+=`<line x1="${x-bw/4}" x2="${x+bw/4}" y1="${ys(s.whi)}" y2="${ys(s.whi)}" style="stroke:${c};stroke-width:1.5"/><line x1="${x-bw/4}" x2="${x+bw/4}" y1="${ys(s.wlo)}" y2="${ys(s.wlo)}" style="stroke:${c};stroke-width:1.5"/>`;
+    g+=`<rect x="${x-bw/2}" y="${ys(s.q3)}" width="${bw}" height="${Math.max(1,ys(s.q1)-ys(s.q3))}" rx="3" style="fill:${c};fill-opacity:.22;stroke:${c};stroke-width:1.5"><title>${esc(groups[i].name)}: 中央値 ${tl(s.med)} / Q1 ${tl(s.q1)} / Q3 ${tl(s.q3)}</title></rect>`;
+    g+=`<line x1="${x-bw/2}" x2="${x+bw/2}" y1="${ys(s.med)}" y2="${ys(s.med)}" style="stroke:${c};stroke-width:2.5"/>`;
+    g+=`<path d="M${x} ${ys(s.mean)-4}l4 4l-4 4l-4-4z" style="fill:var(--panel);stroke:${c};stroke-width:1.5"><title>平均 ${tl(s.mean)}</title></path>`;
+    for(const o of s.out) g+=`<circle cx="${x}" cy="${ys(o)}" r="3" style="fill:none;stroke:${c}"><title>${tl(o)}</title></circle>`;
+  });
+  return g+'</svg>';
+}
+function scatterSVG(x,y,{xl='',yl='',line=null,hline=null,groups=null,title='',ref=null}={}){
+  const xt=ticks(Math.min(...x),Math.max(...x)), yt=ticks(Math.min(...y,...(hline!=null?[hline]:[])),Math.max(...y,...(hline!=null?[hline]:[])));
+  const xs=scale(xt[0],xt[xt.length-1],M.l,W-M.r), ys=scale(yt[0],yt[yt.length-1],H-M.b,M.t);
+  let g=svgOpen('散布図')+frame(xs,ys,xt,yt,xl,yl,title);
+  const op=x.length>300?0.45:0.7;
+  for(let i=0;i<x.length;i++) g+=`<circle cx="${xs(x[i]).toFixed(1)}" cy="${ys(y[i]).toFixed(1)}" r="3.5" style="fill:${groups?COL(groups.idx[i]):'var(--c1)'};fill-opacity:${op}"/>`;
+  const clip=(f)=>{ const a=xt[0],b=xt[xt.length-1]; return `M${xs(a)} ${ys(f(a))}L${xs(b)} ${ys(f(b))}`; };
+  if(hline!=null) g+=`<line class="ref" x1="${M.l}" x2="${W-M.r}" y1="${ys(hline)}" y2="${ys(hline)}"/>`;
+  if(line) g+=`<clipPath id="cp${cardSeq}"><rect x="${M.l}" y="${M.t}" width="${W-M.l-M.r}" height="${H-M.t-M.b}"/></clipPath><path clip-path="url(#cp${cardSeq})" d="${clip(v=>line.a+line.b*v)}" style="stroke:var(--c2);stroke-width:2;fill:none"/>`;
+  if(ref) g+=`<clipPath id="cq${cardSeq}"><rect x="${M.l}" y="${M.t}" width="${W-M.l-M.r}" height="${H-M.t-M.b}"/></clipPath><path class="ref" clip-path="url(#cq${cardSeq})" d="${clip(v=>ref.a+ref.b*v)}"/>`;
+  g+='</svg>';
+  if(groups) g+=`<div class="legend">${groups.names.map((n,i)=>`<span><i style="background:${COL(i)}"></i>${esc(n)}</span>`).join('')}</div>`;
+  return g;
+}
+function qqSVG(v,title=''){
+  const s=[...v].sort((a,b)=>a-b), n=s.length, th=s.map((_,i)=>normInv((i+1-0.375)/(n+0.25)));
+  const q1=quantile(s,.25),q3=quantile(s,.75),z1=normInv(.25),z3=normInv(.75), b=(q3-q1)/(z3-z1), a=q1-b*z1;
+  return scatterSVG(th,s,{xl:'理論分位点（標準正規）',yl:'標本の値',ref:{a,b},title});
+}
+function barSVG(names,vals,{lo=null,hi=null,yl='',title='',horizontalLabels=false}={}){
+  const all=[0,...vals,...(lo||[]),...(hi||[])].filter(Number.isFinite);
+  const yt=ticks(Math.min(...all),Math.max(...all)), ys=scale(yt[0],yt[yt.length-1],H-M.b,M.t);
+  const k=names.length, band=(W-M.l-M.r)/k, xs=i=>M.l+band*(i+0.5), bw=Math.min(60,band*0.7);
+  let g=svgOpen('棒グラフ')+frame(null,ys,null,yt,'',yl,title)+catAxis(names,xs,band);
+  vals.forEach((v,i)=>{
+    const x=xs(i), y0=ys(0), y1=ys(v);
+    g+=`<rect x="${x-bw/2}" y="${Math.min(y0,y1)}" width="${bw}" height="${Math.max(0.5,Math.abs(y0-y1))}" rx="2" style="fill:${lo?COL(i):'var(--c1)'};opacity:.85"><title>${esc(names[i])}: ${tl(v)}</title></rect>`;
+    if(lo&&Number.isFinite(lo[i])&&Number.isFinite(hi[i])) g+=`<path d="M${x} ${ys(lo[i])}V${ys(hi[i])}M${x-7} ${ys(lo[i])}h14M${x-7} ${ys(hi[i])}h14" style="stroke:var(--ink);stroke-width:1.4;fill:none"/>`;
+  });
+  return g+'</svg>';
+}
+
+/* =====================================================================
+   分析の定義
+   ===================================================================== */
+const GROUP_FIELDS=(min,max)=>[
+  {key:'group',type:'cat',optional:true,preferCat:true,many:max===0,none:'（なし：列どうしを比較）',label:'グループ（群）を表す列'},
+  {key:'value',type:'num',label:'値の列（比較する変数）',when:o=>!!o.group},
+  {key:'cols',type:'nums',label:max===2?'比較する 2 つの列':'比較する列（2つ以上）',min,max,defN:max===2?2:3,when:o=>!o.group}
+];
+function needGroups(gs,min,max,name){
+  gs=gs.filter(g=>g.v.length>0);
+  if(gs.length<min) throw new Error(`${name}には ${min} つ以上のグループが必要です（現在 ${gs.length}）。`);
+  if(max&&gs.length>max) throw new Error(`${name}は ${max} グループ用です。グループ列の水準が ${gs.length} 個あります（${gs.map(g=>g.name).slice(0,6).join('・')}…）。3群以上なら「一元配置分散分析」を使ってください。`);
+  return gs;
+}
+function groupStatsTable(gs){
+  const ci=CIPCT();
+  return table(['グループ','n','平均','標準偏差','標準誤差',`平均の${ci}%信頼区間`,'中央値','最小','最大'],
+    gs.map(g=>{const d=describe(g.v,ALPHA()); return [esc(g.name),d.n,fmt(d.mean),fmt(d.sd),fmt(d.se),`[${fmt(d.ciLo)}, ${fmt(d.ciHi)}]`,fmt(d.med),fmt(d.min),fmt(d.max)];}));
+}
+const ANALYSES=[
+/* ---------------- 基本 ---------------- */
+{id:'desc',cat:'基本',name:'記述統計',desc:'平均・標準偏差・四分位・歪度・尖度などの要約統計量を計算します。グループ列を指定するとグループごとに集計します。',
+ fields:[{key:'vars',type:'nums',label:'変数（複数可）',min:1,defN:99},{key:'group',type:'cat',optional:true,label:'グループ別に集計（任意）'}],
+ run(o){
+  const ci=CIPCT(), rows=[];
+  for(const v of o.vars){
+    const col=numOf(v);
+    const sets=o.group?groupsOf(v,o.group).map(g=>({label:g.name,vals:g.v,miss:col.filter((x,i)=>!Number.isFinite(x)&&rawOf(o.group)[i]===g.name).length})):[{label:null,vals:col.filter(Number.isFinite),miss:col.filter(x=>!Number.isFinite(x)).length}];
+    for(const s of sets){
+      const d=describe(s.vals,ALPHA());
+      const r=[esc(v)]; if(o.group) r.push(esc(s.label));
+      r.push(d.n,s.miss,fmt(d.mean),fmt(d.sd),fmt(d.se),`[${fmt(d.ciLo)}, ${fmt(d.ciHi)}]`,fmt(d.min),fmt(d.q1),fmt(d.med),fmt(d.q3),fmt(d.max),fmt(d.max-d.min),fmt(d.skew),fmt(d.kurt));
+      rows.push(r);
+    }
+  }
+  const head=['変数',...(o.group?['グループ']:[]),'n','欠損','平均','標準偏差','標準誤差',`平均の${ci}%CI`,'最小','第1四分位','中央値','第3四分位','最大','範囲','歪度','尖度'];
+  addCard('記述統計'+(o.group?`（${o.group} 別）`:''),table(head,rows)+'<p class="note">標準偏差は不偏分散（n−1 で割る）の平方根。四分位は線形補間（Excel の QUARTILE.INC と同じ）。歪度・尖度は Excel の SKEW / KURT と同じ定義（尖度は正規分布で 0）。</p>');
+ }},
+{id:'freq',cat:'基本',name:'度数分布表',desc:'カテゴリごとの度数と割合を集計します。値の種類が多い数値の列は自動で階級に分けます。',
+ fields:[{key:'col',type:'cat',label:'列'},{key:'bins',type:'number',label:'数値列の階級数（0 = 自動）',value:0}],
+ run(o){
+  const c=colByName(o.col); if(!c) throw new Error('列を選んでください。');
+  let items, binned=false;
+  const vals=c.raw.filter(s=>!isMissing(s));
+  if(c.isNum&&new Set(vals).size>15){
+    binned=true; const v=c.num.filter(Number.isFinite), mn=Math.min(...v), mx=Math.max(...v);
+    const k=o.bins>0?Math.round(o.bins):Math.ceil(Math.log2(v.length)+1); const t=ticks(mn,mx,k); const edges=t;
+    items=[]; for(let i=0;i<edges.length-1;i++){ const a=edges[i],b=edges[i+1]; const last=i===edges.length-2; items.push({name:`${tl(a)}〜${last?'':'<'}${tl(b)}`,count:v.filter(x=>x>=a&&(last?x<=b:x<b)).length}); }
+    items=items.filter((it,i)=>!(it.count===0&&(i===0||i===items.length-1)));
+  } else {
+    const m=new Map(); for(const s of vals) m.set(s,(m.get(s)||0)+1);
+    items=[...m.entries()].sort((a,b)=>c.isNum?Number(a[0])-Number(b[0]):natSort(a[0],b[0])).map(([name,count])=>({name,count}));
+  }
+  const N=sum(items.map(i=>i.count)); let cum=0;
+  const rows=items.map(it=>{ cum+=it.count; return [esc(it.name),it.count,fmt(100*it.count/N,1)+'%',fmt(100*cum/N,1)+'%']; });
+  rows.push(['<b>合計</b>',`<b>${N}</b>`,'100.0%','']);
+  const miss=c.raw.length-vals.length;
+  addCard(`度数分布表：${o.col}`,(binned?'<p class="sub">数値の種類が多いため、階級に分けて集計しました（下限以上・上限未満）。</p>':'')+
+    table(['値','度数','割合','累積割合'],rows)+(miss?`<p class="note">欠損 ${miss} 件は除外しています。</p>`:'')+
+    barSVG(items.map(i=>i.name),items.map(i=>i.count),{yl:'度数'}));
+ }},
+{id:'normal',cat:'基本',name:'正規性の検定（Shapiro–Wilk）',desc:'データが正規分布に従うかを Shapiro–Wilk 検定と Q-Q プロットで確認します。p が小さいと「正規分布ではない」と判断します。',
+ fields:[{key:'value',type:'num',label:'変数'},{key:'group',type:'cat',optional:true,label:'グループ別に検定（任意）'}],
+ run(o){
+  const gs=o.group?groupsOf(o.value,o.group):[{name:o.value,v:numOf(o.value).filter(Number.isFinite)}];
+  const rows=gs.map(g=>{ const r=shapiro(g.v), d=describe(g.v,ALPHA()); return rowP([esc(g.name),g.v.length,r?fmt(r.W,4):'—',r?pCell(r.p):'—',fmt(d.skew),fmt(d.kurt),r?(r.p<ALPHA()?'正規分布とはいえない':'正規性を否定できない'):'n が 3〜5000 の範囲外か、値が一定'],r?r.p:null); });
+  let charts='<div class="charts">';
+  gs.slice(0,6).forEach(g=>{ if(g.v.length>=3) charts+=qqSVG(g.v,'Q-Q プロット：'+g.name); });
+  if(gs.length===1&&gs[0].v.length>1) charts+=histSVG(gs[0].v,{label:o.value,title:'ヒストグラムと正規曲線'});
+  charts+='</div>';
+  addCard(`正規性の検定：${o.value}${o.group?`（${o.group} 別）`:''}`,table(['グループ','n','W','p 値','歪度','尖度','判定'],rows,{sigCol:3})+
+    '<p class="note">帰無仮説：母集団は正規分布に従う。Royston (1995) の近似を使用。サンプルが大きいとわずかなずれでも有意になりやすいので、Q-Q プロット（点が破線に沿っていれば正規に近い）と合わせて判断してください。</p>'+charts+(gs.length>6?'<p class="note">Q-Q プロットは先頭 6 グループのみ表示しています。</p>':''));
+ }},
+/* ---------------- t検定 ---------------- */
+{id:'t1',cat:'平均の比較（パラメトリック）',name:'1標本の t 検定',desc:'1つの変数の平均が、基準値（例：全国平均、理論値）と異なるかを検定します。',
+ fields:[{key:'value',type:'num',label:'変数'},{key:'mu',type:'number',label:'比較する基準値 μ₀',value:0}],
+ run(o){
+  const v=numOf(o.value).filter(Number.isFinite), n=v.length; if(n<2) throw new Error('有効なデータが 2 件以上必要です。');
+  const d=describe(v,ALPHA()), mu=Number(o.mu)||0, t=(d.mean-mu)/d.se, df=n-1, p=tP2(t,df), tc=tInv(1-ALPHA()/2,df), es=(d.mean-mu)/d.sd;
+  addCard(`1標本の t 検定：${o.value}（μ₀ = ${mu}）`,
+    table(['n','平均','標準偏差','標準誤差','平均 − μ₀',`差の${CIPCT()}%信頼区間`,'t','自由度','p 値（両側）','効果量 d'],
+      [rowP([n,fmt(d.mean),fmt(d.sd),fmt(d.se),fmt(d.mean-mu),`[${fmt(d.mean-mu-tc*d.se)}, ${fmt(d.mean-mu+tc*d.se)}]`,fmt(t),df,pCell(p),fmt(es)],p)],{sigCol:8})+
+    verdict(p,`平均 ${fmt(d.mean,2)} は基準値 ${mu} と異なるといえます。`,`平均 ${fmt(d.mean,2)} が基準値 ${mu} と異なるとはいえません。`,`t(${df}) = ${fmt(t,2)}, ${pText(p)}, d = ${fmt(es,2)}`)+
+    '<p class="note">効果量 d の目安：0.2 小、0.5 中、0.8 大。</p>');
+ }},
+{id:'tpair',cat:'平均の比較（パラメトリック）',name:'対応のある t 検定',desc:'同じ人の「前・後」など、対になった 2 つの列の平均の差を検定します。',
+ fields:[{key:'a',type:'num',label:'変数 1（例：事前）',def:0},{key:'b',type:'num',label:'変数 2（例：事後）',def:1}],
+ run(o){
+  if(o.a===o.b) throw new Error('異なる 2 つの列を選んでください。');
+  const [x,y]=pairs(o.a,o.b), n=x.length; if(n<2) throw new Error('両方の列に値がある行が 2 件以上必要です。');
+  const dif=x.map((v,i)=>y[i]-v), dd=describe(dif,ALPHA()), t=dd.mean/dd.se, df=n-1, p=tP2(t,df), tc=tInv(1-ALPHA()/2,df), dz=dd.mean/dd.sd, r=pearson(x,y);
+  const dx=describe(x,ALPHA()), dy=describe(y,ALPHA());
+  addCard(`対応のある t 検定：${o.a} → ${o.b}`,
+    table(['変数','n','平均','標準偏差','標準誤差'],[[esc(o.a),n,fmt(dx.mean),fmt(dx.sd),fmt(dx.se)],[esc(o.b),n,fmt(dy.mean),fmt(dy.sd),fmt(dy.se)]])+
+    `<h4>差（${esc(o.b)} − ${esc(o.a)}）の検定</h4>`+
+    table(['平均の差','差の標準偏差',`差の${CIPCT()}%信頼区間`,'t','自由度','p 値（両側）','効果量 dz','2変数の相関 r'],
+      [rowP([fmt(dd.mean),fmt(dd.sd),`[${fmt(dd.mean-tc*dd.se)}, ${fmt(dd.mean+tc*dd.se)}]`,fmt(t),df,pCell(p),fmt(dz),fmt(r)],p)],{sigCol:5})+
+    verdict(p,`${o.b} の平均は ${o.a} より ${dd.mean>0?'高い':'低い'}といえます。`,`2 つの平均に差があるとはいえません。`,`t(${df}) = ${fmt(t,2)}, ${pText(p)}, dz = ${fmt(dz,2)}`)+
+    (n<(numOf(o.a).length)?`<p class="note">どちらかが欠損している行は除外しました（使用 ${n} 行）。</p>`:'')+
+    `<div class="charts">${barSVG([o.a,o.b],[dx.mean,dy.mean],{lo:[dx.ciLo,dy.ciLo],hi:[dx.ciHi,dy.ciHi],yl:'平均',title:`平均と${CIPCT()}%信頼区間`})}${histSVG(dif,{label:'差',title:'差の分布'})}</div>`);
+ }},
+{id:'t2',cat:'平均の比較（パラメトリック）',name:'独立した 2 群の t 検定',desc:'男女・実験群と対照群など、別々の 2 つのグループの平均を比べます。Welch の t 検定（等分散を仮定しない）を推奨として表示します。',
+ fields:GROUP_FIELDS(2,2),
+ run(o){
+  const gs=needGroups(getGroups(o),2,2,'2群の t 検定'); const [g1,g2]=gs;
+  if(g1.v.length<2||g2.v.length<2) throw new Error('各グループに 2 件以上のデータが必要です。');
+  const d1=describe(g1.v,ALPHA()), d2=describe(g2.v,ALPHA()), n1=d1.n,n2=d2.n, diff=d1.mean-d2.mean;
+  const sp2=((n1-1)*d1.var+(n2-1)*d2.var)/(n1+n2-2), seS=Math.sqrt(sp2*(1/n1+1/n2)), dfS=n1+n2-2, tS=diff/seS, pS=tP2(tS,dfS);
+  const a=d1.var/n1, b=d2.var/n2, seW=Math.sqrt(a+b), dfW=(a+b)**2/(a*a/(n1-1)+b*b/(n2-1)), tW=diff/seW, pW=tP2(tW,dfW);
+  const d=diff/Math.sqrt(sp2), J=1-3/(4*(n1+n2)-9), g=d*J, lev=levene([g1.v,g2.v]);
+  const tcS=tInv(1-ALPHA()/2,dfS), tcW=tInv(1-ALPHA()/2,dfW);
+  const title=o.group?`${o.value}（${o.group}：${g1.name} vs ${g2.name}）`:`${g1.name} vs ${g2.name}`;
+  addCard('独立した 2 群の t 検定：'+title,
+    groupStatsTable(gs)+
+    `<h4>検定結果（差 = ${esc(g1.name)} − ${esc(g2.name)}）</h4>`+
+    table(['方法','平均の差','標準誤差',`差の${CIPCT()}%信頼区間`,'t','自由度','p 値（両側）'],[
+      rowP(['<b>Welch の t 検定（推奨）</b>',fmt(diff),fmt(seW),`[${fmt(diff-tcW*seW)}, ${fmt(diff+tcW*seW)}]`,fmt(tW),fmtDf(dfW),pCell(pW)],pW),
+      rowP(['Student の t 検定（等分散を仮定）',fmt(diff),fmt(seS),`[${fmt(diff-tcS*seS)}, ${fmt(diff+tcS*seS)}]`,fmt(tS),dfS,pCell(pS)],pS)],{sigCol:6})+
+    verdict(pW,`${g1.name} と ${g2.name} の平均には差があります（${diff>0?g1.name:g2.name} の方が高い）。`,`${g1.name} と ${g2.name} の平均に差があるとはいえません。`,`Welch: t(${fmtDf(dfW)}) = ${fmt(tW,2)}, ${pText(pW)}, d = ${fmt(d,2)}`)+
+    table(['効果量','値'],[["Cohen's d",fmt(d)],["Hedges' g（小標本補正）",fmt(g)]])+
+    `<p class="note">等分散性（Levene 検定・中央値版）：F(${lev.dfb}, ${lev.dfw}) = ${fmt(lev.F,2)}, ${pText(lev.p)}。Welch の検定は等分散でなくても使えるため、通常はこちらを報告します。効果量 d の目安：0.2 小、0.5 中、0.8 大。</p>`+
+    `<div class="charts">${boxSVG(gs,{ylabel:o.group?o.value:'値',title:'箱ひげ図（◇ は平均）'})}${barSVG(gs.map(g=>g.name),[d1.mean,d2.mean],{lo:[d1.ciLo,d2.ciLo],hi:[d1.ciHi,d2.ciHi],yl:'平均',title:`平均と${CIPCT()}%信頼区間`})}</div>`);
+ }},
+{id:'anova',cat:'平均の比較（パラメトリック）',name:'一元配置分散分析（ANOVA）',desc:'3 つ以上のグループの平均に差があるかを検定し、どのグループ間に差があるかを多重比較（Holm 法）で調べます。',
+ fields:[...GROUP_FIELDS(2,0),{key:'posthoc',type:'check',label:'多重比較を行う',value:true}],
+ run(o){
+  const gs=needGroups(getGroups(o),2,0,'分散分析');
+  if(gs.some(g=>g.v.length<2)) throw new Error('各グループに 2 件以上のデータが必要です：'+gs.filter(g=>g.v.length<2).map(g=>g.name).join('、'));
+  const r=anova1(gs.map(g=>g.v)), lev=levene(gs.map(g=>g.v)), wa=welchAnova(gs.map(g=>g.v));
+  let body=groupStatsTable(gs)+'<h4>分散分析表</h4>'+
+    table(['変動要因','平方和','自由度','平均平方','F','p 値','η²'],[
+      rowP(['グループ間',fmt(r.ssb),r.dfb,fmt(r.msb),fmt(r.F),pCell(r.p),fmt(r.eta2)],r.p),
+      ['グループ内（誤差）',fmt(r.ssw),r.dfw,fmt(r.msw),'','',''],
+      ['全体',fmt(r.sst),r.N-1,'','','','']],{sigCol:5})+
+    verdict(r.p,'少なくとも 1 組のグループ間で平均に差があります。','グループ間で平均に差があるとはいえません。',`F(${r.dfb}, ${r.dfw}) = ${fmt(r.F,2)}, ${pText(r.p)}, η² = ${fmt(r.eta2,3)}`)+
+    `<p class="note">等分散性（Levene 検定・中央値版）：F(${lev.dfb}, ${lev.dfw}) = ${fmt(lev.F,2)}, ${pText(lev.p)}。`+
+    (wa?`等分散を仮定しない Welch の分散分析：F(${wa.df1}, ${fmtDf(wa.df2)}) = ${fmt(wa.F,2)}, ${pText(wa.p)}。`:'')+
+    `η² の目安：.01 小、.06 中、.14 大。ω² = ${fmt(r.omega2)}。</p>`;
+  if(lev.p<ALPHA()&&wa) body+=`<p class="warn">Levene 検定で分散が等しくない可能性が示されました。Welch の分散分析（${pText(wa.p)}）の結果も参考にしてください。</p>`;
+  if(o.posthoc&&gs.length>2){
+    const pr=[]; for(let i=0;i<gs.length;i++) for(let j=i+1;j<gs.length;j++){
+      const a=gs[i],b=gs[j], diff=mean(a.v)-mean(b.v), se=Math.sqrt(r.msw*(1/a.v.length+1/b.v.length)), t=diff/se, p=tP2(t,r.dfw);
+      pr.push({a:a.name,b:b.name,diff,se,t,p});
+    }
+    const adj=holm(pr.map(x=>x.p));
+    body+='<h4>多重比較（プールした誤差分散による t 検定、Holm 法で補正）</h4>'+
+      table(['比較','平均の差','標準誤差','t','p 値（補正前）','p 値（Holm 補正）'],pr.map((x,i)=>rowP([`${esc(x.a)} − ${esc(x.b)}`,fmt(x.diff),fmt(x.se),fmt(x.t),fp(x.p),pCell(adj[i])],adj[i])),{sigCol:5});
+  }
+  body+=`<div class="charts">${boxSVG(gs,{ylabel:o.group?o.value:'値',title:'箱ひげ図（◇ は平均）'})}${barSVG(gs.map(g=>g.name),gs.map(g=>mean(g.v)),{lo:gs.map(g=>describe(g.v,ALPHA()).ciLo),hi:gs.map(g=>describe(g.v,ALPHA()).ciHi),yl:'平均',title:`平均と${CIPCT()}%信頼区間`})}</div>`;
+  addCard('一元配置分散分析：'+(o.group?`${o.value} by ${o.group}`:gs.map(g=>g.name).join('・')),body);
+ }},
+/* ---------------- ノンパラメトリック ---------------- */
+{id:'mw',cat:'ノンパラメトリック検定',name:'Mann–Whitney の U 検定',desc:'独立した 2 群の分布（中央値の位置）を、正規分布を仮定せずに比べます。t 検定のノンパラメトリック版です。',
+ fields:GROUP_FIELDS(2,2),
+ run(o){
+  const gs=needGroups(getGroups(o),2,2,'U 検定'); const [g1,g2]=gs, n1=g1.v.length, n2=g2.v.length, N=n1+n2;
+  const {r,ties}=rank([...g1.v,...g2.v]); const R1=sum(r.slice(0,n1)), R2=sum(r.slice(n1));
+  const U1=R1-n1*(n1+1)/2, U2=n1*n2-U1, U=Math.min(U1,U2), mu=n1*n2/2;
+  const sig=Math.sqrt(n1*n2/12*((N+1)-ties/(N*(N-1))));
+  const z=sig>0?Math.max(0,Math.abs(U1-mu)-0.5)/sig:0, p=sig>0?2*normUpper(z):1, eff=z/Math.sqrt(N);
+  addCard(`Mann–Whitney の U 検定：${g1.name} vs ${g2.name}`,
+    table(['グループ','n','中央値','第1四分位','第3四分位','平均順位','順位和'],gs.map((g,i)=>{const d=describe(g.v,ALPHA()); return [esc(g.name),d.n,fmt(d.med),fmt(d.q1),fmt(d.q3),fmt((i?R2:R1)/d.n,2),fmt(i?R2:R1,1)];}))+
+    table(['U','z','p 値（両側）','効果量 r'],[rowP([fmt(U,1),fmt(z),pCell(p),fmt(eff)],p)],{sigCol:2})+
+    verdict(p,`${g1.name} と ${g2.name} の分布には差があります。`,`${g1.name} と ${g2.name} の分布に差があるとはいえません。`,`U = ${fmt(U,1)}, z = ${fmt(z,2)}, ${pText(p)}, r = ${fmt(eff,2)}`)+
+    '<p class="note">正規近似（連続性補正・同順位補正あり）。効果量 r の目安：0.1 小、0.3 中、0.5 大。</p>'+boxSVG(gs,{ylabel:o.group?o.value:'値',title:'箱ひげ図'}));
+ }},
+{id:'wil',cat:'ノンパラメトリック検定',name:'Wilcoxon の符号付順位検定',desc:'対応のある 2 つの列（事前・事後など）を、正規分布を仮定せずに比べます。対応のある t 検定のノンパラメトリック版です。',
+ fields:[{key:'a',type:'num',label:'変数 1（例：事前）',def:0},{key:'b',type:'num',label:'変数 2（例：事後）',def:1}],
+ run(o){
+  if(o.a===o.b) throw new Error('異なる 2 つの列を選んでください。');
+  const [x,y]=pairs(o.a,o.b), d=x.map((v,i)=>y[i]-v).filter(v=>v!==0), zeros=x.length-d.length, n=d.length;
+  if(n<1) throw new Error('差が 0 でないペアがありません。');
+  const {r,ties}=rank(d.map(Math.abs)); let Wp=0,Wm=0; d.forEach((v,i)=>{ if(v>0) Wp+=r[i]; else Wm+=r[i]; });
+  const mu=n*(n+1)/4, vr=n*(n+1)*(2*n+1)/24-ties/48, z=vr>0?Math.max(0,Math.abs(Wp-mu)-0.5)/Math.sqrt(vr):0, p=vr>0?2*normUpper(z):1, eff=z/Math.sqrt(n);
+  addCard(`Wilcoxon の符号付順位検定：${o.a} → ${o.b}`,
+    table(['変数','n','中央値','第1四分位','第3四分位'],[[esc(o.a),x.length,fmt(median(x)),fmt(quantile([...x].sort((a,b)=>a-b),.25)),fmt(quantile([...x].sort((a,b)=>a-b),.75))],[esc(o.b),y.length,fmt(median(y)),fmt(quantile([...y].sort((a,b)=>a-b),.25)),fmt(quantile([...y].sort((a,b)=>a-b),.75))]])+
+    table(['正の順位和 W+','負の順位和 W−','有効ペア数','z','p 値（両側）','効果量 r'],[rowP([fmt(Wp,1),fmt(Wm,1),n,fmt(z),pCell(p),fmt(eff)],p)],{sigCol:4})+
+    verdict(p,`${o.b} は ${o.a} より${Wp>Wm?'大きい':'小さい'}傾向があります。`,'2 つの変数に差があるとはいえません。',`z = ${fmt(z,2)}, ${pText(p)}, r = ${fmt(eff,2)}`)+
+    `<p class="note">差 = ${esc(o.b)} − ${esc(o.a)}。差が 0 のペア ${zeros} 件は除外。正規近似（連続性補正・同順位補正あり）。</p>`);
+ }},
+{id:'kw',cat:'ノンパラメトリック検定',name:'Kruskal–Wallis 検定',desc:'3 つ以上のグループの分布を、正規分布を仮定せずに比べます。分散分析のノンパラメトリック版です。多重比較は Holm 補正つき U 検定。',
+ fields:[...GROUP_FIELDS(2,0),{key:'posthoc',type:'check',label:'多重比較を行う',value:true}],
+ run(o){
+  const gs=needGroups(getGroups(o),2,0,'Kruskal–Wallis 検定'), all=gs.flatMap(g=>g.v), N=all.length, {r,ties}=rank(all);
+  let off=0, Hs=0; const R=gs.map(g=>{ const s=sum(r.slice(off,off+g.v.length)); off+=g.v.length; Hs+=s*s/g.v.length; return s; });
+  let H=12/(N*(N+1))*Hs-3*(N+1); const C=1-ties/(N**3-N); if(C>0) H/=C;
+  const df=gs.length-1, p=chi2Upper(H,df), eps=H/(N-1);
+  let body=table(['グループ','n','中央値','第1四分位','第3四分位','平均順位'],gs.map((g,i)=>{const s=[...g.v].sort((a,b)=>a-b); return [esc(g.name),g.v.length,fmt(quantile(s,.5)),fmt(quantile(s,.25)),fmt(quantile(s,.75)),fmt(R[i]/g.v.length,2)];}))+
+    table(['H（χ²）','自由度','p 値','効果量 ε²'],[rowP([fmt(H),df,pCell(p),fmt(eps)],p)],{sigCol:2})+
+    verdict(p,'少なくとも 1 組のグループ間で分布に差があります。','グループ間で分布に差があるとはいえません。',`H(${df}) = ${fmt(H,2)}, ${pText(p)}`);
+  if(o.posthoc&&gs.length>2){
+    const pr=[]; for(let i=0;i<gs.length;i++) for(let j=i+1;j<gs.length;j++){
+      const a=gs[i].v,b=gs[j].v,n1=a.length,n2=b.length,Nn=n1+n2,rk=rank([...a,...b]),U1=sum(rk.r.slice(0,n1))-n1*(n1+1)/2,mu=n1*n2/2,sg=Math.sqrt(n1*n2/12*((Nn+1)-rk.ties/(Nn*(Nn-1))));
+      const z=sg>0?Math.max(0,Math.abs(U1-mu)-0.5)/sg:0; pr.push({a:gs[i].name,b:gs[j].name,U:Math.min(U1,n1*n2-U1),z,p:sg>0?2*normUpper(z):1});
+    }
+    const adj=holm(pr.map(x=>x.p));
+    body+='<h4>多重比較（Mann–Whitney の U 検定、Holm 法で補正）</h4>'+table(['比較','U','z','p 値（補正前）','p 値（Holm 補正）'],pr.map((x,i)=>rowP([`${esc(x.a)} − ${esc(x.b)}`,fmt(x.U,1),fmt(x.z),fp(x.p),pCell(adj[i])],adj[i])),{sigCol:4});
+  }
+  addCard('Kruskal–Wallis 検定：'+(o.group?`${o.value} by ${o.group}`:gs.map(g=>g.name).join('・')),body+boxSVG(gs,{ylabel:o.group?o.value:'値',title:'箱ひげ図'}));
+ }},
+/* ---------------- 関係 ---------------- */
+{id:'chi',cat:'関係を調べる',name:'クロス集計とカイ二乗検定',desc:'2 つのカテゴリ変数（性別×回答 など）に関連があるかを検定します。2×2 表では Fisher の正確検定も表示します。',
+ fields:[{key:'row',type:'cat',label:'行の変数',preferCatIdx:0},{key:'col',type:'cat',label:'列の変数',preferCatIdx:1},{key:'exp',type:'check',label:'期待度数・行％も表示',value:true}],
+ run(o){
+  if(o.row===o.col) throw new Error('異なる 2 つの列を選んでください。');
+  const a=rawOf(o.row), b=rawOf(o.col), R=new Map(), Cc=new Map(), cell=new Map(); let N=0;
+  for(let i=0;i<a.length;i++){ if(isMissing(a[i])||isMissing(b[i])) continue; N++; R.set(a[i],(R.get(a[i])||0)+1); Cc.set(b[i],(Cc.get(b[i])||0)+1); const k=a[i]+'\u0000'+b[i]; cell.set(k,(cell.get(k)||0)+1); }
+  const rn=[...R.keys()].sort(natSort), cn=[...Cc.keys()].sort(natSort);
+  if(rn.length<2||cn.length<2) throw new Error('それぞれの変数に 2 種類以上の値が必要です。');
+  if(rn.length>40||cn.length>40) throw new Error('カテゴリの数が多すぎます（40 以下にしてください）。数値の列を選んでいないか確認してください。');
+  const O=rn.map(r=>cn.map(c=>cell.get(r+'\u0000'+c)||0)), E=rn.map(r=>cn.map(c=>R.get(r)*Cc.get(c)/N));
+  let chi=0, small=0, minE=Infinity; for(let i=0;i<rn.length;i++) for(let j=0;j<cn.length;j++){ chi+=(O[i][j]-E[i][j])**2/E[i][j]; if(E[i][j]<5) small++; minE=Math.min(minE,E[i][j]); }
+  const df=(rn.length-1)*(cn.length-1), p=chi2Upper(chi,df), V=Math.sqrt(chi/(N*(Math.min(rn.length,cn.length)-1)));
+  let G=0; for(let i=0;i<rn.length;i++) for(let j=0;j<cn.length;j++) if(O[i][j]>0) G+=2*O[i][j]*Math.log(O[i][j]/E[i][j]);
+  const head=[`${esc(o.row)} ＼ ${esc(o.col)}`,...cn.map(esc),'合計'];
+  const rows=[];
+  rn.forEach((r,i)=>{
+    rows.push([`<b>${esc(r)}</b>`,...O[i],R.get(r)]);
+    if(o.exp){ rows.push(['<span class="note">　期待度数</span>',...E[i].map(v=>`<span class="note">${fmt(v,1)}</span>`),'']); rows.push(['<span class="note">　行％</span>',...O[i].map(v=>`<span class="note">${fmt(100*v/R.get(r),1)}%</span>`),'<span class="note">100%</span>']); }
+  });
+  rows.push(['<b>合計</b>',...cn.map(c=>Cc.get(c)),N]);
+  const tests=[rowP(['Pearson のカイ二乗',fmt(chi),df,pCell(p)],p),rowP(['尤度比（G²）',fmt(G),df,pCell(chi2Upper(G,df))],chi2Upper(G,df))];
+  let pMain=p, mainName='カイ二乗検定';
+  if(rn.length===2&&cn.length===2){
+    const [[A,B],[C,D]]=O; let y=0; for(let i=0;i<2;i++) for(let j=0;j<2;j++) y+=Math.max(0,Math.abs(O[i][j]-E[i][j])-0.5)**2/E[i][j];
+    const py=chi2Upper(y,1), pf=fisher2x2(A,B,C,D);
+    tests.push(rowP(['Yates の連続性補正',fmt(y),1,pCell(py)],py),rowP(['Fisher の正確検定（両側）','—','—',pCell(pf)],pf));
+    if(small>0){ pMain=pf; mainName='Fisher の正確検定'; }
+    const OR=(A*D)/(B*C);
+    tests.push(['オッズ比',fmt(OR),'',(A&&B&&C&&D)?(()=>{const se=Math.sqrt(1/A+1/B+1/C+1/D),zc=normInv(1-ALPHA()/2); return `${CIPCT()}%CI [${fmt(Math.exp(Math.log(OR)-zc*se))}, ${fmt(Math.exp(Math.log(OR)+zc*se))}]`;})():'']);
+  }
+  let body=table(head,rows)+'<h4>検定</h4>'+table(['検定','統計量','自由度','p 値'],tests,{sigCol:3})+
+    verdict(pMain,`${o.row} と ${o.col} には関連があります。`,`${o.row} と ${o.col} に関連があるとはいえません。`,`${mainName}：${mainName.startsWith('Fisher')?'':`χ²(${df}, N = ${N}) = ${fmt(chi,2)}, `}${pText(pMain)}, Cramér の V = ${fmt(V,2)}`)+
+    `<p class="note">Cramér の V（関連の強さ）= ${fmt(V)}（目安：0.1 弱い、0.3 中程度、0.5 強い）。</p>`;
+  const cells=rn.length*cn.length;
+  if(small/cells>0.2||minE<1) body+=`<p class="warn">期待度数が 5 未満のセルが ${small} 個（${fmt(100*small/cells,0)}%）あります。カイ二乗検定の近似が不正確な可能性があります${rn.length===2&&cn.length===2?'。Fisher の正確検定の結果を使ってください':'。カテゴリをまとめることを検討してください'}。</p>`;
+  addCard(`クロス集計：${o.row} × ${o.col}`,body);
+ }},
+{id:'corr',cat:'関係を調べる',name:'相関分析',desc:'2 つ以上の数値変数の間の相関係数（Pearson / Spearman）と無相関検定の結果を出します。2 変数のときは散布図も描きます。',
+ fields:[{key:'vars',type:'nums',label:'変数（2 つ以上）',min:2,defN:4},{key:'method',type:'select',label:'相関係数',value:'pearson',options:[['pearson','Pearson の積率相関'],['spearman','Spearman の順位相関'],['both','両方']]}],
+ run(o){
+  const vs=o.vars, methods=o.method==='both'?['pearson','spearman']:[o.method];
+  let body='';
+  for(const m of methods){
+    const name=m==='pearson'?'Pearson の r':'Spearman の ρ';
+    const mat=[], list=[];
+    for(let i=0;i<vs.length;i++){ const row=[`<b>${esc(vs[i])}</b>`];
+      for(let j=0;j<vs.length;j++){
+        if(i===j){row.push('1');continue;}
+        let [x,y]=pairs(vs[i],vs[j]); const n=x.length;
+        if(m==='spearman'){ x=rank(x).r; y=rank(y).r; }
+        const r=n>2?pearson(x,y):NaN, t=corrTest(r,n);
+        row.push(`${fmt(r)}<span class="star">${stars(t.p)}</span>`);
+        if(j>i){ let ci='—'; if(m==='pearson'&&n>3&&Math.abs(r)<1){ const z=Math.atanh(r),se=1/Math.sqrt(n-3),zc=normInv(1-ALPHA()/2); ci=`[${fmt(Math.tanh(z-zc*se))}, ${fmt(Math.tanh(z+zc*se))}]`; }
+          list.push(rowP([`${esc(vs[i])} × ${esc(vs[j])}`,n,fmt(r),ci,fmt(t.t),n-2,pCell(t.p)],t.p)); }
+      }
+      mat.push(row);
+    }
+    body+=`<h4>${name}：相関行列</h4>`+table(['',...vs.map(esc)],mat)+`<h4>${name}：無相関検定</h4>`+table(['組み合わせ','n',m==='pearson'?'r':'ρ',m==='pearson'?`${CIPCT()}%信頼区間`:'信頼区間','t','自由度','p 値'],list,{sigCol:6});
+  }
+  body+='<p class="note">† p < .10, * p < .05, ** p < .01, *** p < .001。欠損はペアごとに除外。相関の強さの目安：|r| 0.1 弱い、0.3 中程度、0.5 強い。</p>';
+  if(vs.length===2){ const [x,y]=pairs(vs[0],vs[1]); const r=ols(y,x.map(v=>[1,v])); body+=scatterSVG(x,y,{xl:vs[0],yl:vs[1],line:{a:r.b[0],b:r.b[1]}}); }
+  addCard('相関分析：'+vs.join('・'),body);
+ }},
+{id:'reg',cat:'関係を調べる',name:'回帰分析（単回帰・重回帰）',desc:'目的変数を 1 つ以上の説明変数で予測する式（最小二乗法）を求め、各係数の有意性や決定係数 R² を出します。',
+ fields:[{key:'y',type:'num',label:'目的変数（予測したい変数）',def:0},{key:'xs',type:'nums',label:'説明変数（1 つ以上）',min:1,defN:1,defSkip:1}],
+ run(o){
+  const xs=o.xs.filter(x=>x!==o.y); if(!xs.length) throw new Error('目的変数と別の説明変数を 1 つ以上選んでください。');
+  const yc=numOf(o.y), xc=xs.map(numOf), Y=[], X=[];
+  for(let i=0;i<yc.length;i++){ if(!Number.isFinite(yc[i])||xc.some(c=>!Number.isFinite(c[i]))) continue; Y.push(yc[i]); X.push([1,...xc.map(c=>c[i])]); }
+  const n=Y.length, p=xs.length+1; if(n<=p+1) throw new Error(`データが少なすぎます（使用可能 ${n} 行、説明変数 ${xs.length} 個）。`);
+  const r=ols(Y,X), adj=1-(1-r.r2)*(n-1)/r.dfr, F=(r.ssr/r.dfm)/r.mse, pF=fUpper(F,r.dfm,r.dfr), sdy=sd(Y), tc=tInv(1-ALPHA()/2,r.dfr);
+  const vif=xs.map((_,k)=>{ if(xs.length<2) return NaN; const yk=X.map(row=>row[k+1]), Xk=X.map(row=>row.filter((_,j)=>j!==k+1)); try{ const rr=ols(yk,Xk); return 1/(1-rr.r2);}catch(e){return Infinity;} });
+  const coef=['（切片）',...xs].map((nm,i)=>{ const t=r.b[i]/r.se[i], pv=tP2(t,r.dfr), beta=i?r.b[i]*sd(X.map(row=>row[i]))/sdy:NaN;
+    return rowP([i?`<b>${esc(nm)}</b>`:nm,fmt(r.b[i],4),fmt(r.se[i],4),i?fmt(beta):'—',fmt(t),pCell(pv),`[${fmt(r.b[i]-tc*r.se[i],4)}, ${fmt(r.b[i]+tc*r.se[i],4)}]`,...(xs.length>1?[i?fmt(vif[i-1],2):'—']:[])],i?pv:null); });
+  const eq=`${o.y} = ${fmt(r.b[0],4)}`+xs.map((x,i)=>` ${r.b[i+1]<0?'−':'+'} ${fmt(Math.abs(r.b[i+1]),4)} × ${x}`).join('');
+  let body=table(['R','R²','調整済み R²','推定値の標準誤差','n'],[[fmt(Math.sqrt(Math.max(0,r.r2))),fmt(r.r2),fmt(adj),fmt(Math.sqrt(r.mse)),n]])+
+    '<h4>分散分析表</h4>'+table(['','平方和','自由度','平均平方','F','p 値'],[rowP(['回帰',fmt(r.ssr),r.dfm,fmt(r.ssr/r.dfm),fmt(F),pCell(pF)],pF),['残差',fmt(r.sse),r.dfr,fmt(r.mse),'',''],['全体',fmt(r.sst),n-1,'','','']],{sigCol:5})+
+    '<h4>係数</h4>'+table(['変数','係数 B','標準誤差','標準化係数 β','t','p 値',`B の${CIPCT()}%信頼区間`,...(xs.length>1?['VIF']:[])],coef,{sigCol:5})+
+    `<p class="verdict ${pF<ALPHA()?'sig':''}">回帰式：<b>${esc(eq)}</b><br>モデル全体：F(${r.dfm}, ${r.dfr}) = ${fmt(F,2)}, ${pText(pF)}, R² = ${fmt(r.r2,3)}（目的変数のばらつきの ${fmt(100*r.r2,1)}% を説明）</p>`+
+    '<p class="note">β は変数の単位をそろえた係数で、説明変数どうしの影響の大きさを比べるときに使います。VIF が 10 を超える（目安によっては 5）と多重共線性の疑いがあります。カテゴリ変数を使う場合は 0/1 のダミー変数の列を作ってください。</p>';
+  if(xs.length>1&&vif.some(v=>v>10)) body+='<p class="warn">VIF が 10 を超える説明変数があります。説明変数どうしの相関が強く、係数が不安定な可能性があります。</p>';
+  body+='<div class="charts">';
+  if(xs.length===1) body+=scatterSVG(X.map(r=>r[1]),Y,{xl:xs[0],yl:o.y,line:{a:r.b[0],b:r.b[1]},title:'散布図と回帰直線'});
+  body+=scatterSVG(r.fit,r.res,{xl:'予測値',yl:'残差',hline:0,title:'残差プロット'})+qqSVG(r.res,'残差の Q-Q プロット')+'</div>';
+  addCard(`回帰分析：${o.y} ← ${xs.join(' + ')}`,body);
+ }},
+/* ---------------- グラフ ---------------- */
+{id:'hist',cat:'グラフ',name:'ヒストグラム',desc:'数値変数の分布をヒストグラムで表示します。',
+ fields:[{key:'value',type:'num',label:'変数'},{key:'bins',type:'number',label:'階級の数（0 = 自動・スタージェスの公式）',value:0},{key:'normal',type:'check',label:'正規分布曲線を重ねる',value:true}],
+ run(o){ const v=numOf(o.value).filter(Number.isFinite); if(!v.length) throw new Error('データがありません。'); const d=describe(v,ALPHA());
+  addCard('ヒストグラム：'+o.value,histSVG(v,{bins:Math.round(o.bins)||0,normal:o.normal,label:o.value})+`<p class="note">n = ${d.n}、平均 = ${fmt(d.mean)}、標準偏差 = ${fmt(d.sd)}、中央値 = ${fmt(d.med)}</p>`); }},
+{id:'box',cat:'グラフ',name:'箱ひげ図',desc:'分布の中央値・四分位・外れ値をグループや変数ごとに並べて比較します。',
+ fields:GROUP_FIELDS(1,0),
+ run(o){ const gs=getGroups(o).filter(g=>g.v.length); if(!gs.length) throw new Error('データがありません。');
+  addCard('箱ひげ図：'+(o.group?`${o.value} by ${o.group}`:gs.map(g=>g.name).join('・')),boxSVG(gs,{ylabel:o.group?o.value:'値'})+'<p class="note">箱：第1〜第3四分位、太線：中央値、◇：平均、ひげ：箱から 1.5×IQR 以内の最小・最大、○：それより外側の値（外れ値）。</p>'+groupStatsTable(gs)); }},
+{id:'scatter',cat:'グラフ',name:'散布図',desc:'2 つの数値変数の関係を散布図で表示します。グループ列で色分けもできます。',
+ fields:[{key:'x',type:'num',label:'横軸（X）',def:0},{key:'y',type:'num',label:'縦軸（Y）',def:1},{key:'group',type:'cat',optional:true,label:'色分け（任意）'},{key:'line',type:'check',label:'回帰直線を引く',value:true}],
+ run(o){
+  const xc=numOf(o.x), yc=numOf(o.y), gc=o.group?rawOf(o.group):null, X=[],Y=[],G=[];
+  for(let i=0;i<xc.length;i++){ if(!Number.isFinite(xc[i])||!Number.isFinite(yc[i])) continue; if(gc&&isMissing(gc[i])) continue; X.push(xc[i]);Y.push(yc[i]); if(gc) G.push(gc[i]); }
+  if(X.length<2) throw new Error('データが 2 件以上必要です。');
+  let groups=null; if(gc){ const names=[...new Set(G)].sort(natSort); groups={names,idx:G.map(g=>names.indexOf(g))}; }
+  const r=ols(Y,X.map(v=>[1,v])), rr=pearson(X,Y), t=corrTest(rr,X.length);
+  addCard(`散布図：${o.x} × ${o.y}`,scatterSVG(X,Y,{xl:o.x,yl:o.y,line:o.line?{a:r.b[0],b:r.b[1]}:null,groups})+`<p class="note">n = ${X.length}、Pearson の r = ${fmt(rr)}（${pText(t.p)}）${o.line?`、回帰直線：${esc(o.y)} = ${fmt(r.b[0],4)} ${r.b[1]<0?'−':'+'} ${fmt(Math.abs(r.b[1]),4)} × ${esc(o.x)}、R² = ${fmt(r.r2)}`:''}</p>`);
+ }},
+{id:'meanbar',cat:'グラフ',name:'平均値の棒グラフ',desc:'グループごとの平均をエラーバー（信頼区間・標準偏差・標準誤差）つきの棒グラフで表示します。',
+ fields:[...GROUP_FIELDS(1,0),{key:'err',type:'select',label:'エラーバー',value:'ci',options:[['ci','信頼区間'],['sd','標準偏差'],['se','標準誤差'],['none','なし']]}],
+ run(o){ const gs=getGroups(o).filter(g=>g.v.length); if(!gs.length) throw new Error('データがありません。'); const ds=gs.map(g=>describe(g.v,ALPHA()));
+  const lo=o.err==='none'?null:ds.map(d=>o.err==='ci'?d.ciLo:d.mean-(o.err==='sd'?d.sd:d.se)), hi=o.err==='none'?null:ds.map(d=>o.err==='ci'?d.ciHi:d.mean+(o.err==='sd'?d.sd:d.se));
+  const label={ci:`${CIPCT()}%信頼区間`,sd:'±標準偏差',se:'±標準誤差',none:'なし'}[o.err];
+  addCard('平均値の棒グラフ：'+(o.group?`${o.value} by ${o.group}`:gs.map(g=>g.name).join('・')),barSVG(gs.map(g=>g.name),ds.map(d=>d.mean),{lo:lo||gs.map(()=>NaN),hi:hi||gs.map(()=>NaN),yl:o.group?o.value:'平均'})+`<p class="note">エラーバー：${label}</p>`+groupStatsTable(gs)); }},
+];
+
+/* =====================================================================
+   フォーム
+   ===================================================================== */
+const OPTS={};
+const anaSel=document.getElementById('anaSelect'), form=document.getElementById('anaForm');
+(function buildMenu(){
+  const cats=[...new Set(ANALYSES.map(a=>a.cat))];
+  anaSel.innerHTML=cats.map(c=>`<optgroup label="${esc(c)}">`+ANALYSES.filter(a=>a.cat===c).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')+'</optgroup>').join('');
+})();
+const curAna=()=>ANALYSES.find(a=>a.id===anaSel.value);
+function getOpts(a){
+  const o=OPTS[a.id]||(OPTS[a.id]={});
+  const nums=numCols(), all=allCols(), cats=catCols(), dn=defNums();
+  let catPick=0;
+  for(const f of a.fields){
+    const v=o[f.key];
+    if(f.type==='num'){ if(!nums.includes(v)) o[f.key]=dn[Math.min(f.def||0,dn.length-1)]??''; }
+    else if(f.type==='cat'){
+      if(v===''&&f.optional) continue;
+      if(!all.includes(v)){
+        if(f.optional){
+          let pick=f.preferCat&&cats.length?cats[0]:'';
+          if(f.many){ const lv=c=>new Set(colByName(c).raw.filter(x=>!isMissing(x))).size; const m=cats.find(c=>lv(c)>=3&&lv(c)<=20); if(m) pick=m; }
+          o[f.key]=pick;
+        }
+        else { const idx=f.preferCatIdx??catPick++; o[f.key]=cats[idx]??cats[0]??all[Math.min(idx,all.length-1)]??''; }
+      }
+    }
+    else if(f.type==='nums'){ if(v) o[f.key]=v.filter(x=>nums.includes(x)); else { o[f.key]=dn.slice(f.defSkip||0,(f.defSkip||0)+(f.defN||2)); if(!o[f.key].length) o[f.key]=dn.slice(0,f.defN||2); } }
+    else if(v===undefined) o[f.key]=f.value;
+  }
+  return o;
+}
+function renderForm(){
+  const a=curAna(); document.getElementById('anaDesc').textContent=a.desc;
+  const runBtn=document.getElementById('runBtn');
+  if(!DATA){ form.innerHTML='<p class="warn">先に「データ」タブでデータを読み込んでください（サンプルデータもあります）。</p>'; runBtn.disabled=true; return; }
+  runBtn.disabled=false;
+  const o=getOpts(a), nums=numCols(), all=allCols();
+  let h='';
+  for(const f of a.fields){
+    if(f.when&&!f.when(o)) continue;
+    h+=`<div class="field"><label>${esc(f.label)}</label>`;
+    if(f.type==='num'||f.type==='cat'){
+      const list=f.type==='num'?nums:all;
+      h+=`<select data-k="${f.key}">`+(f.optional?`<option value="">${esc(f.none||'（なし）')}</option>`:'')+
+        list.map(c=>{const col=colByName(c); return `<option value="${esc(c)}"${o[f.key]===c?' selected':''}>${esc(c)}${f.type==='cat'&&col.isNum?'（数値）':''}</option>`;}).join('')+'</select>';
+      if(f.type==='num'&&!nums.length) h+='<p class="warn">数値の列がありません。</p>';
+    } else if(f.type==='nums'){
+      h+='<div class="checks">'+nums.map(c=>`<label><input type="checkbox" data-k="${f.key}" value="${esc(c)}"${o[f.key].includes(c)?' checked':''}> ${esc(c)}</label>`).join('')+'</div>';
+      h+=`<div class="toolbar" style="margin:4px 0 0"><button type="button" class="btn" data-all="${f.key}" style="padding:2px 8px;font-size:12px">全選択</button><button type="button" class="btn" data-none="${f.key}" style="padding:2px 8px;font-size:12px">全解除</button></div>`;
+    } else if(f.type==='number'){
+      h+=`<input type="number" step="any" data-k="${f.key}" value="${esc(o[f.key])}">`;
+    } else if(f.type==='select'){
+      h+=`<select data-k="${f.key}">`+f.options.map(([v,l])=>`<option value="${v}"${o[f.key]===v?' selected':''}>${esc(l)}</option>`).join('')+'</select>';
+    } else if(f.type==='check'){
+      h=h.replace(/<label>[^<]*<\/label>$/,'');
+      h+=`<label class="inline"><input type="checkbox" data-k="${f.key}"${o[f.key]?' checked':''}> ${esc(f.label)}</label>`;
+    }
+    h+='</div>';
+  }
+  form.innerHTML=h;
+}
+form.addEventListener('change',e=>{
+  const el=e.target, k=el.dataset.k; if(!k) return;
+  const a=curAna(), o=OPTS[a.id], f=a.fields.find(x=>x.key===k);
+  if(f.type==='nums') o[k]=[...form.querySelectorAll(`input[data-k="${k}"]:checked`)].map(x=>x.value);
+  else if(f.type==='check') o[k]=el.checked;
+  else if(f.type==='number') o[k]=parseFloat(el.value);
+  else o[k]=el.value;
+  renderForm();
+});
+form.addEventListener('click',e=>{
+  const k=e.target.dataset.all||e.target.dataset.none; if(!k) return;
+  OPTS[curAna().id][k]=e.target.dataset.all?numCols():[]; renderForm();
+});
+anaSel.addEventListener('change',()=>{ renderForm(); try{localStorage.setItem('statlab.ana',anaSel.value);}catch(e){} });
+document.getElementById('runBtn').addEventListener('click',()=>{
+  const a=curAna(); if(!DATA) return;
+  const o=getOpts(a);
+  try{
+    for(const f of a.fields){
+      if(f.when&&!f.when(o)) continue;
+      if(f.type==='nums'){ if(o[f.key].length<(f.min||1)) throw new Error(`「${f.label}」を ${f.min||1} つ以上選んでください。`); if(f.max&&o[f.key].length>f.max) throw new Error(`「${f.label}」は ${f.max} つ選んでください。`); }
+      if((f.type==='num'||(f.type==='cat'&&!f.optional))&&!o[f.key]) throw new Error(`「${f.label}」を選んでください。`);
+    }
+    a.run(o);
+  }catch(err){
+    console.error(err);
+    addCard(a.name+'：エラー',`<p class="err">${esc(err.message||String(err))}</p>`);
+  }
+});
+
+/* =====================================================================
+   画面・ファイル操作
+   ===================================================================== */
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+function showView(v){
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x.dataset.view===v));
+  document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on',x.id==='view-'+v));
+  if(v==='analysis') renderForm();
+}
+const rawText=document.getElementById('rawText'), hasHeader=document.getElementById('hasHeader');
+function loadText(t,{goAnalysis=false}={}){
+  rawText.value=t.length>500000?t.slice(0,500000)+'\n…（表示は先頭のみ。データはすべて読み込み済み）':t;
+  const d=buildData(t,hasHeader.checked);
+  if(!d||!d.n){ alert('データを読み取れませんでした。'); return; }
+  setData(d,t);
+  if(goAnalysis) showView('analysis');
+}
+document.getElementById('applyBtn').onclick=()=>{ const t=rawText.value; if(!t.trim()){ setData(null); return; } loadText(t); };
+hasHeader.onchange=()=>{ if(rawText.value.trim()) loadText(LAST_TEXT||rawText.value); };
+let LAST_TEXT=null;
+async function readFile(file){
+  const buf=await file.arrayBuffer(); let t;
+  try{ t=new TextDecoder('utf-8',{fatal:true}).decode(buf); }
+  catch(e){ try{ t=new TextDecoder('shift_jis').decode(buf); }catch(e2){ t=new TextDecoder('utf-8').decode(buf); } }
+  LAST_TEXT=t; loadText(t);
+}
+document.getElementById('fileInput').onchange=e=>{ const f=e.target.files[0]; if(f) readFile(f); e.target.value=''; };
+const drop=document.getElementById('drop');
+['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'||e.target===drop)drop.classList.remove('over');}));
+document.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f){ showView('data'); readFile(f); } });
+document.getElementById('clearBtn').onclick=()=>{ rawText.value=''; LAST_TEXT=null; setData(null); try{localStorage.removeItem('statlab.data');}catch(e){} };
+document.getElementById('sampleBtn').onclick=()=>{ hasHeader.checked=true; LAST_TEXT=null; loadText(sampleData()); };
+rawText.addEventListener('input',()=>{ LAST_TEXT=null; });
+
+function sampleData(){
+  let s=20240601; const rnd=()=>{ s|=0; s=s+0x6D2B79F5|0; let t=Math.imul(s^s>>>15,1|s); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
+  const nrm=()=>Math.sqrt(-2*Math.log(rnd()||1e-12))*Math.cos(2*Math.PI*rnd());
+  const lines=['ID,性別,群,年齢,身長,体重,事前テスト,事後テスト,満足度'];
+  for(let i=1;i<=90;i++){
+    const male=rnd()<0.5, grp='ABC'[(i-1)%3], age=20+Math.floor(rnd()*46);
+    const h=male?171+6*nrm():158+5.5*nrm(), w=22*(h/100)**2+(male?2:0)+0.06*(age-40)+5*nrm();
+    const pre=60+10*nrm(), post=pre+{A:1,B:5,C:9}[grp]+5*nrm();
+    const sat=Math.max(1,Math.min(5,Math.round(3+{A:-0.6,B:0,C:0.7}[grp]+0.9*nrm())));
+    const f=(v,d)=>v.toFixed(d);
+    let row=[i,male?'男':'女',grp,age,f(h,1),f(w,1),Math.round(pre),Math.round(post),sat];
+    if(i===17) row[5]=''; if(i===42) row[7]=''; if(i===63) row[4]='';
+    lines.push(row.join(','));
+  }
+  return lines.join('\n');
+}
+
+/* 結果の保存・印刷 */
+document.getElementById('printBtn').onclick=()=>{ showView('analysis'); window.print(); };
+document.getElementById('clearOutBtn').onclick=()=>{ if(document.querySelector('#results .card')&&!confirm('結果をすべて消去しますか？')) return; document.getElementById('results').innerHTML='<div class="empty" id="emptyMsg">左で分析を選んで「実行」すると、ここに結果が表示されます。</div>'; };
+document.getElementById('saveBtn').onclick=()=>{
+  const cards=[...document.querySelectorAll('#results .card')]; if(!cards.length){ alert('保存する結果がありません。'); return; }
+  const body=cards.map(c=>{ const x=c.cloneNode(true); x.querySelectorAll('header button').forEach(b=>b.remove()); return x.outerHTML; }).join('\n');
+  const css=document.getElementById('mainStyle').textContent;
+  const html=`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>統計ラボ 分析結果</title><style>${css} body{padding:16px;max-width:1100px;margin:0 auto}</style></head><body><h1 style="font-size:18px">統計ラボ 分析結果（${new Date().toLocaleString('ja-JP')}）</h1>${body}</body></html>`;
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  a.download=`stat-results_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.html`;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+};
+
+/* テーマ */
+document.getElementById('themeBtn').onclick=()=>{
+  const r=document.documentElement, dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme=dark?'light':'dark'; try{localStorage.setItem('statlab.theme',r.dataset.theme);}catch(e){}
+};
+
+/* 起動 */
+(function init(){
+  try{ const th=localStorage.getItem('statlab.theme'); if(th) document.documentElement.dataset.theme=th; }catch(e){}
+  try{ const an=localStorage.getItem('statlab.ana'); if(an&&ANALYSES.some(a=>a.id===an)) anaSel.value=an; }catch(e){}
+  let saved=null; try{ saved=JSON.parse(localStorage.getItem('statlab.data')||'null'); }catch(e){}
+  if(saved&&saved.t){ hasHeader.checked=saved.h!==false; LAST_TEXT=saved.t; loadText(saved.t); }
+  else renderForm();
+})();
+</script>
+</body>
+</html>
